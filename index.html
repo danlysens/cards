@@ -57,7 +57,7 @@ const canvas = document.getElementById('canvas');
 const scanBtn = document.getElementById('scan-btn');
 const loadingModel = document.getElementById('loading-model');
 
-// Инициализация камеры и модели
+// --- Инициализация камеры и модели ---
 async function init() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
@@ -78,36 +78,41 @@ async function init() {
 }
 init();
 
-// Функция сканирования
+// --- Функция сканирования ---
 async function captureAndIdentify() {
-    if (!video.videoWidth || !video.videoHeight) return alert("Камера не готова!");
+    if (!video.videoWidth || !video.videoHeight) {
+        alert("Камера не готова!");
+        return;
+    }
 
     scanBtn.disabled = true;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
-
-    classifier.classify(canvas, (err, results) => {
+    // Классификация видео напрямую
+    classifier.classify(video, (err, results) => {
         if (err) {
             console.error(err);
             scanBtn.disabled = false;
             return;
         }
 
-        // Берем первый результат
-        let carName = results[0].label;
-        let confidence = (results[0].confidence*100).toFixed(1);
+        const carName = results[0].label;
+        const confidence = (results[0].confidence*100).toFixed(1);
+
+        // Делаем снимок через canvas
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
         const imageDataURL = canvas.toDataURL('image/jpeg',0.8);
 
         saveCar(carName, imageDataURL, confidence);
         alert(`✅ Найдено: ${carName}\nУверенность: ${confidence}%`);
         showCollection();
+
         scanBtn.disabled = false;
     });
 }
 
-// LocalStorage и галерея
+// --- LocalStorage и галерея ---
 function saveCar(model,image,confidence){
     let garage=JSON.parse(localStorage.getItem('ml5CarsDB'))||[];
     garage.push({id:Date.now(),model,image,confidence, date:new Date().toLocaleDateString()});
@@ -135,7 +140,7 @@ function renderGallery(){
     });
 }
 
-// Переключение экранов
+// --- Переключение экранов ---
 function showCollection(){ renderGallery(); document.getElementById('camera-screen').style.display='none'; document.getElementById('collection-screen').style.display='block'; }
 function showCamera(){ document.getElementById('collection-screen').style.display='none'; document.getElementById('camera-screen').style.display='flex'; }
 
