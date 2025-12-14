@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Авто-Коллекция: Поймай Их Все!</title>
+    <style>
+        /* Базовые стили CSS */
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            text-align: center;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #fff;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+        }
+
+        h1 {
+            color: #007bff;
+            margin-bottom: 30px;
+        }
+
+        /* Стиль для секции аккаунта */
+        .account-info {
+            background-color: #e9f7ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 5px solid #007bff;
+        }
+
+        /* Стиль для загрузчика файлов */
+        .uploader {
+            border: 2px dashed #ccc;
+            padding: 40px 20px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: background-color 0.3s;
+        }
+
+        .uploader:hover {
+            background-color: #f0f0f0;
+        }
+
+        #file-input {
+            display: none; /* Скрываем стандартный инпут */
+        }
+
+        .collection {
+            margin-top: 30px;
+            text-align: left;
+        }
+
+        .car-item {
+            background: #e3f7e3;
+            border: 1px solid #c9ecc9;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .recognized-image {
+            max-width: 100px;
+            height: auto;
+            border-radius: 4px;
+            margin-right: 15px;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #ffebcc;
+            color: #e65100;
+            border-radius: 6px;
+            display: none; /* Сначала скрыто */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>🚗 Авто-Коллекция: Поймай Их Все!</h1>
+
+        <div class="account-info">
+            <p><strong>Пользователь:</strong> <span id="username">Гость</span> | 
+            <button onclick="loginLogout()">Войти / Выйти</button></p>
+            <p><strong>Твоя Коллекция:</strong> <span id="collection-count">0</span> автомобилей</p>
+        </div>
+
+        <hr>
+
+        <h2>📸 Сфотографируй Тачку!</h2>
+        
+        <div class="uploader" onclick="document.getElementById('file-input').click()">
+            <p>Нажми, чтобы загрузить фото автомобиля</p>
+            <input type="file" id="file-input" accept="image/*">
+        </div>
+
+        <div id="status-message" class="status"></div>
+
+        <div class="collection">
+            <h2>Твои Найденные Авто:</h2>
+            <div id="car-list">
+                </div>
+        </div>
+
+    </div>
+
+    <script>
+        let is_logged_in = false;
+        let car_collection = [];
+        const statusMessage = document.getElementById('status-message');
+        const carList = document.getElementById('car-list');
+        const collectionCount = document.getElementById('collection-count');
+        const usernameSpan = document.getElementById('username');
+
+        // ИМИТАЦИЯ ДАННЫХ ДЛЯ РАСПОЗНАВАНИЯ (это не настоящее ML!)
+        const dummyCars = [
+            { model: "Tesla Model 3", make: "Tesla", year: 2020, rarity: "Обычный" },
+            { model: "Porsche 911 Turbo S", make: "Porsche", year: 2022, rarity: "Редкий" },
+            { model: "LADA Granta", make: "АвтоВАЗ", year: 2018, rarity: "Легендарный" },
+        ];
+
+        function loginLogout() {
+            is_logged_in = !is_logged_in;
+            if (is_logged_in) {
+                const user = prompt("Введите имя пользователя:", "Твой_Ник");
+                usernameSpan.textContent = user || "Коллекционер";
+                showMessage(`Добро пожаловать, ${usernameSpan.textContent}!`, 'success');
+            } else {
+                usernameSpan.textContent = "Гость";
+                car_collection = [];
+                updateCollectionUI();
+                showMessage('Вы вышли из системы.', 'info');
+            }
+        }
+
+        function updateCollectionUI() {
+            carList.innerHTML = '';
+            collectionCount.textContent = car_collection.length;
+            if (car_collection.length === 0) {
+                carList.innerHTML = '<p>Пока что в коллекции пусто. Загрузи первое фото!</p>';
+            } else {
+                car_collection.forEach(car => {
+                    const carDiv = document.createElement('div');
+                    carDiv.className = 'car-item';
+                    
+                    // Отображение заглушки фото (для реального приложения нужно отображать загруженное фото)
+                    const img = document.createElement('img');
+                    img.src = car.imageURL || 'https://via.placeholder.com/100x60?text=Car'; // Заглушка изображения
+                    img.alt = car.model;
+                    img.className = 'recognized-image';
+
+                    carDiv.innerHTML = `
+                        <div>
+                            <strong>${car.make} ${car.model}</strong> (${car.year})<br>
+                            <small>Редкость: ${car.rarity}</small>
+                        </div>
+                        <small>СОХРАНЕНО</small>
+                    `;
+                    carDiv.prepend(img); // Добавляем изображение
+                    carList.appendChild(carDiv);
+                });
+            }
+        }
+
+        document.getElementById('file-input').addEventListener('change', function(event) {
+            if (!is_logged_in) {
+                showMessage("Сначала нужно войти в аккаунт, чтобы сохранять авто!", 'error');
+                return;
+            }
+
+            const file = event.target.files[0];
+            if (file) {
+                showMessage(`Загрузка файла: ${file.name}...`, 'info');
+                
+                // ИМИТАЦИЯ РАБОТЫ СЕРВЕРА И РАСПОЗНАВАНИЯ
+                setTimeout(() => {
+                    // Выбираем случайную машину из списка-заглушки
+                    const recognizedCar = dummyCars[Math.floor(Math.random() * dummyCars.length)];
+                    
+                    // Создаем URL для загруженного изображения для отображения
+                    const imageURL = URL.createObjectURL(file);
+
+                    const newCar = { ...recognizedCar, imageURL: imageURL }; // Добавляем URL к данным машины
+                    car_collection.push(newCar);
+                    
+                    updateCollectionUI();
+                    showMessage(`✅ Найдено! Добавлено в коллекцию: ${recognizedCar.make} ${recognizedCar.model}!`, 'success');
+                }, 2000); // Задержка для имитации загрузки и обработки
+            }
+        });
+
+        function showMessage(message, type) {
+            statusMessage.textContent = message;
+            statusMessage.style.backgroundColor = type === 'success' ? '#d4edda' : type === 'info' ? '#cce5ff' : '#f8d7da';
+            statusMessage.style.color = type === 'success' ? '#155724' : type === 'info' ? '#004085' : '#721c24';
+            statusMessage.style.display = 'block';
+            
+            // Скрыть через 5 секунд
+            setTimeout(() => {
+                statusMessage.style.display = 'none';
+            }, 5000);
+        }
+
+        // Инициализация интерфейса
+        updateCollectionUI();
+    </script>
+</body>
+</html>
