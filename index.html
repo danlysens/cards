@@ -70,7 +70,6 @@ async function init() {
         return;
     }
 
-    // Загружаем MobileNet через ml5.js
     classifier = await ml5.imageClassifier('MobileNet');
     loadingModel.style.display = 'none';
     scanBtn.disabled = false;
@@ -86,17 +85,18 @@ async function captureAndIdentify() {
 
     scanBtn.disabled = true;
 
+    // Делаем снимок в canvas
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video,0,0,canvas.width,canvas.height);
+
     try {
-        const results = await classifier.classify(video);
+        const results = await classifier.classify(canvas); // классификация по canvas
         const carName = results[0].label;
         const confidence = (results[0].confidence*100).toFixed(1);
 
-        // Снимок через canvas
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
         const imageDataURL = canvas.toDataURL('image/jpeg',0.8);
-
         saveCar(carName, imageDataURL, confidence);
         alert(`✅ Найдено: ${carName}\nУверенность: ${confidence}%`);
         showCollection();
