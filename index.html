@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CarDex (СТАБИЛЬНЫЙ) 🧠</title>
+    <title>CarDex (СТАБИЛЬНЫЙ ФОТО) 📸</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
@@ -12,12 +12,13 @@
     <style>
         /* --- СТИЛИ --- */
         body { font-family: 'Roboto', sans-serif; background: #222; color: white; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
+        
         #camera-screen { flex: 1; position: relative; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; background: #000; overflow: hidden; }
         video { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1; }
         
         .overlay { position: relative; z-index: 2; width: 100%; padding-bottom: 20px; display: flex; justify-content: center; align-items: center; background: linear-gradient(transparent, rgba(0,0,0,0.8)); }
         
-        /* Кнопка без текста */
+        /* Кнопка без текста (Пункт 3) */
         #scan-btn { 
             width: 80px; height: 80px; border-radius: 50%; border: 5px solid white; 
             background: rgba(50, 150, 255, 0.8); box-shadow: 0 0 15px rgba(50, 150, 255, 0.6); 
@@ -26,10 +27,10 @@
         #scan-btn:active { transform: scale(0.9); }
         #scan-btn:disabled { background: gray; border-color: #555; cursor: not-allowed; }
 
-        /* Лоадер */
+        /* Лоадеры */
         #loading-model, #loader {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            z-index: 11; background: rgba(0,0,0,0.9); padding: 20px; border-radius: 10px; text-align: center;
+            z-index: 11; background: rgba(0,0,0,0.9); color: white; padding: 20px; border-radius: 10px; text-align: center;
         }
         .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #10b981; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -83,11 +84,10 @@
         const loader = document.getElementById('loader');
         const scanBtn = document.getElementById('scan-btn');
 
-        // Список слов для лучшего распознавания
+        // Список слов для умного анализа
         const specificCarKeywords = [
             'sports car', 'convertible', 'hatchback', 'sedan', 'minivan', 'pickup truck', 
-            'limousine', 'model t', 'station wagon', 'minibus', 
-            // Добавим больше конкретных названий, которые MobileNet иногда знает:
+            'limousine', 'model t', 'station wagon', 'minibus', 'suv',
             'porsche', 'ferrari', 'lamborghini', 'tesla', 'bmw', 'audi', 'mercedes', 'toyota', 'honda', 'nissan'
         ];
         
@@ -95,15 +95,13 @@
 
         async function startCamera() {
             try {
-                // Сброс предыдущего потока для стабильности
-                if (stream) stream.getTracks().forEach(track => track.stop()); 
-
+                // Пытаемся получить поток камеры
                 stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
                 video.srcObject = stream;
                 video.play();
             } catch (err) {
                 console.error("Ошибка доступа к камере:", err);
-                alert("Разрешите доступ к камере!");
+                alert("Разрешите доступ к камере! (Или используйте кнопку 'Гараж', чтобы проверить, что ИИ загрузился)");
             }
         }
         
@@ -116,7 +114,6 @@
 
         async function init() {
             await startCamera(); 
-            // Загрузка MobileNet
             model = await mobilenet.load();
             loadingModel.style.display = 'none';
             scanBtn.disabled = false;
@@ -125,7 +122,7 @@
         // --- 2. СТАБИЛЬНОЕ РАСПОЗНАВАНИЕ И СОХРАНЕНИЕ ---
 
         async function captureAndIdentify() {
-            // 1. Блокировка интерфейса
+            // Устранение Пункта 1: Не выключаем/включаем поток, а просто захватываем кадр.
             scanBtn.disabled = true;
             loader.style.display = 'block';
 
@@ -134,22 +131,21 @@
             let imageDataURL = null; 
             
             try {
-                // 2. Распознавание MobileNet прямо из тега <video> (самый стабильный метод)
-                const predictions = await model.classify(video);
-
-                // 3. Снимок (делаем только после успешного распознавания)
+                // 1. Захват кадра на Canvas (Стабильный метод)
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
                 canvas.getContext('2d').drawImage(video, 0, 0);
                 imageDataURL = canvas.toDataURL('image/jpeg', 0.8);
+
+                // 2. Распознавание MobileNet (отправляем Canvas)
+                // Если тут происходит сбой, это означает, что устройство не справляется с MobileNet.
+                const predictions = await model.classify(canvas); 
                 
-                // 4. УМНЫЙ АНАЛИЗ (Улучшение П.2)
-                
+                // 3. УМНЫЙ АНАЛИЗ (Улучшение Пункта 2)
                 const carPredictions = predictions.filter(p => p.className.toLowerCase().includes('car') || p.className.toLowerCase().includes('truck') || p.className.toLowerCase().includes('suv'));
 
                 let bestMatch = null;
                 
-                // 4.1. Ищем конкретные марки/типы (приоритет)
                 for (const label of carPredictions) {
                     const foundSpecific = specificCarKeywords.find(kw => label.className.toLowerCase().includes(kw));
                     if (foundSpecific) {
@@ -158,46 +154,41 @@
                     }
                 }
 
-                // 4.2. Если не нашли конкретное, берем лучшее совпадение с 'car'
                 if (!bestMatch && carPredictions.length > 0) {
                     bestMatch = { name: carPredictions[0].className, score: carPredictions[0].probability };
                 }
                 
-                // 5. Форматирование результата
+                // 4. Форматирование результата
                 if (bestMatch) {
-                    // Очистка названия
                     finalCarName = bestMatch.name.split(',')[0].trim().replace('_', ' ');
                     confidence = (bestMatch.score * 100).toFixed(1);
 
                     // Добавление "старая/новая"
                     if (finalCarName.toLowerCase().includes('model t')) {
                         finalCarName = `Старинный Ford Model T`;
-                    } else if (finalCarName.toLowerCase().includes('limousine')) {
-                        finalCarName = `Лимузин`;
                     } else if (finalCarName.toLowerCase().includes('sports car')) {
-                        finalCarName = `Спортивный автомобиль`;
+                        finalCarName = `Спортивный Автомобиль`;
                     } else if (finalCarName.toLowerCase().includes('suv')) {
                         finalCarName = `Внедорожник / SUV`;
                     }
                 }
                 
-                // Если не нашли ничего, берем просто "неопознанный"
                 if (finalCarName === "Неопознанный Объект 🧐") {
-                     alert("Не удалось распознать автомобиль. Попробуй подойти ближе или изменить ракурс.");
+                     alert("Не удалось распознать автомобиль. Попробуй обновить страницу и сфокусироваться.");
                 }
 
             } catch (error) {
-                // Это должно поймать ошибку "Ошибка ИИ"
+                // Мягкая обработка ошибок вместо фатального сбоя
                 console.error("Ошибка распознавания MobileNet:", error);
-                finalCarName = "Ошибка ИИ: Сбой обработки";
-                alert("Ошибка ИИ: Сбой обработки. Попробуй обновить страницу.");
+                finalCarName = "СБОЙ: Повтори сканирование";
+                alert("СБОЙ: Не удалось обработать кадр. Повтори сканирование.");
             } finally {
-                // 6. Сохранение и вывод
+                // 5. Сохранение и вывод
                 if (imageDataURL) {
                      saveCar(finalCarName, imageDataURL, confidence);
                 }
                
-                alert(`✅ Найдено: ${finalCarName}\nУверенность: ${confidence}%`);
+                alert(`✅ Результат: ${finalCarName}\nУверенность: ${confidence}%`);
                 
                 loader.style.display = 'none';
                 scanBtn.disabled = false;
@@ -205,7 +196,7 @@
             }
         }
         
-        // --- 3. ПЕРЕКЛЮЧЕНИЕ ЭКРАНОВ (Улучшенная стабильность) ---
+        // --- 3. ПЕРЕКЛЮЧЕНИЕ ЭКРАНОВ ---
 
         function showCollection() {
             stopCamera(); 
@@ -220,17 +211,16 @@
             startCamera(); 
         }
 
-        // --- 4. СОХРАНЕНИЕ (без изменений) ---
+        // --- 4. СОХРАНЕНИЕ ---
         function saveCar(model, image, confidence) {
-            let garage = JSON.parse(localStorage.getItem('tfjsCarsDB_v2')) || [];
+            let garage = JSON.parse(localStorage.getItem('tfjsCarsDB_v3')) || [];
             garage.push({ id: Date.now(), model: model, image: image, confidence: confidence, date: new Date().toLocaleDateString() });
-            localStorage.setItem('tfjsCarsDB_v2', JSON.stringify(garage));
+            localStorage.setItem('tfjsCarsDB_v3', JSON.stringify(garage));
         }
 
         function renderGallery() {
             const list = document.getElementById('list');
-            // Используем новую базу данных для избежания конфликтов
-            const garage = JSON.parse(localStorage.getItem('tfjsCarsDB_v2')) || []; 
+            const garage = JSON.parse(localStorage.getItem('tfjsCarsDB_v3')) || []; 
             document.getElementById('count').innerText = garage.length;
             list.innerHTML = '';
             
@@ -250,7 +240,6 @@
             });
         }
         
-        // Инициализация
         init();
         renderGallery();
     </script>
