@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CarDex (TF.js Free) 🧠</title>
+    <title>CarDex (СТАБИЛЬНЫЙ) 🧠</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
@@ -17,7 +17,7 @@
         
         .overlay { position: relative; z-index: 2; width: 100%; padding-bottom: 20px; display: flex; justify-content: center; align-items: center; background: linear-gradient(transparent, rgba(0,0,0,0.8)); }
         
-        /* Кнопка без текста, только круг */
+        /* Кнопка без текста */
         #scan-btn { 
             width: 80px; height: 80px; border-radius: 50%; border: 5px solid white; 
             background: rgba(50, 150, 255, 0.8); box-shadow: 0 0 15px rgba(50, 150, 255, 0.6); 
@@ -75,7 +75,7 @@
 
     <script>
         let model;
-        let stream; // Для хранения потока камеры
+        let stream;
 
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
@@ -83,18 +83,21 @@
         const loader = document.getElementById('loader');
         const scanBtn = document.getElementById('scan-btn');
 
-        // Список слов, которые MobileNet может использовать для описания машин
+        // Список слов для лучшего распознавания
         const specificCarKeywords = [
-            'sports car', 'convertible', 'hatchback', 'sedan', 'minivan', 
-            'pickup truck', 'limousine', 'model t', 'beach wagon', 'station wagon',
-            // Конкретные марки, которые MobileNet иногда знает
-            'porsche', 'ferrari', 'tesla', 'bmw', 'audi', 'mercedes', 'ford', 'chevrolet'
+            'sports car', 'convertible', 'hatchback', 'sedan', 'minivan', 'pickup truck', 
+            'limousine', 'model t', 'station wagon', 'minibus', 
+            // Добавим больше конкретных названий, которые MobileNet иногда знает:
+            'porsche', 'ferrari', 'lamborghini', 'tesla', 'bmw', 'audi', 'mercedes', 'toyota', 'honda', 'nissan'
         ];
         
-        // --- 1. УПРАВЛЕНИЕ КАМЕРОЙ (ИСПРАВЛЕНИЕ П.1) ---
+        // --- 1. УПРАВЛЕНИЕ КАМЕРОЙ И ЗАГРУЗКА ИИ ---
 
         async function startCamera() {
             try {
+                // Сброс предыдущего потока для стабильности
+                if (stream) stream.getTracks().forEach(track => track.stop()); 
+
                 stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
                 video.srcObject = stream;
                 video.play();
@@ -112,77 +115,88 @@
         }
 
         async function init() {
-            // Запуск камеры при загрузке страницы
             await startCamera(); 
-
             // Загрузка MobileNet
             model = await mobilenet.load();
             loadingModel.style.display = 'none';
             scanBtn.disabled = false;
         }
         
-        // --- 2. РАСПОЗНАВАНИЕ (УЛУЧШЕНИЕ П.2) ---
+        // --- 2. СТАБИЛЬНОЕ РАСПОЗНАВАНИЕ И СОХРАНЕНИЕ ---
+
         async function captureAndIdentify() {
             // 1. Блокировка интерфейса
             scanBtn.disabled = true;
             loader.style.display = 'block';
-            stopCamera(); // Остановка потока перед снимком
 
-            // 2. Снимок
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
-
-            let finalCarName = "Неопознанный Автомобиль 🧐";
+            let finalCarName = "Неопознанный Объект 🧐";
             let confidence = 0;
-            const imageDataURL = canvas.toDataURL('image/jpeg', 0.8);
+            let imageDataURL = null; 
             
             try {
-                // 3. Обработка ИИ
-                const predictions = await model.classify(canvas);
+                // 2. Распознавание MobileNet прямо из тега <video> (самый стабильный метод)
+                const predictions = await model.classify(video);
 
-                // 4. УМНЫЙ АНАЛИЗ (ищем точные типы/марки)
-                const carPredictions = predictions.filter(p => p.className.toLowerCase().includes('car') || p.className.toLowerCase().includes('truck'));
+                // 3. Снимок (делаем только после успешного распознавания)
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                imageDataURL = canvas.toDataURL('image/jpeg', 0.8);
+                
+                // 4. УМНЫЙ АНАЛИЗ (Улучшение П.2)
+                
+                const carPredictions = predictions.filter(p => p.className.toLowerCase().includes('car') || p.className.toLowerCase().includes('truck') || p.className.toLowerCase().includes('suv'));
 
                 let bestMatch = null;
-
-                // Сначала ищем конкретные, редкие классы
+                
+                // 4.1. Ищем конкретные марки/типы (приоритет)
                 for (const label of carPredictions) {
                     const foundSpecific = specificCarKeywords.find(kw => label.className.toLowerCase().includes(kw));
-                    
                     if (foundSpecific) {
-                        // Если нашли что-то конкретное (BMW, Model T), ставим это в приоритет
                         bestMatch = { name: label.className, score: label.probability };
-                        break; // Выходим, так как нашли лучший результат
+                        break; 
                     }
                 }
 
-                // Если не нашли конкретную марку, берем самый вероятный класс, связанный с машиной
+                // 4.2. Если не нашли конкретное, берем лучшее совпадение с 'car'
                 if (!bestMatch && carPredictions.length > 0) {
                     bestMatch = { name: carPredictions[0].className, score: carPredictions[0].probability };
                 }
                 
                 // 5. Форматирование результата
                 if (bestMatch) {
-                    // Берем только первое слово (самое главное), убираем запятые и нижние подчеркивания
+                    // Очистка названия
                     finalCarName = bestMatch.name.split(',')[0].trim().replace('_', ' ');
                     confidence = (bestMatch.score * 100).toFixed(1);
 
-                    // Добавляем простое определение "старая/новая" на основе MobileNet
+                    // Добавление "старая/новая"
                     if (finalCarName.toLowerCase().includes('model t')) {
                         finalCarName = `Старинный Ford Model T`;
                     } else if (finalCarName.toLowerCase().includes('limousine')) {
                         finalCarName = `Лимузин`;
                     } else if (finalCarName.toLowerCase().includes('sports car')) {
                         finalCarName = `Спортивный автомобиль`;
+                    } else if (finalCarName.toLowerCase().includes('suv')) {
+                        finalCarName = `Внедорожник / SUV`;
                     }
                 }
+                
+                // Если не нашли ничего, берем просто "неопознанный"
+                if (finalCarName === "Неопознанный Объект 🧐") {
+                     alert("Не удалось распознать автомобиль. Попробуй подойти ближе или изменить ракурс.");
+                }
+
             } catch (error) {
-                console.error("Ошибка распознавания:", error);
-                finalCarName = "Ошибка ИИ";
+                // Это должно поймать ошибку "Ошибка ИИ"
+                console.error("Ошибка распознавания MobileNet:", error);
+                finalCarName = "Ошибка ИИ: Сбой обработки";
+                alert("Ошибка ИИ: Сбой обработки. Попробуй обновить страницу.");
             } finally {
                 // 6. Сохранение и вывод
-                saveCar(finalCarName, imageDataURL, confidence);
+                if (imageDataURL) {
+                     saveCar(finalCarName, imageDataURL, confidence);
+                }
+               
                 alert(`✅ Найдено: ${finalCarName}\nУверенность: ${confidence}%`);
                 
                 loader.style.display = 'none';
@@ -191,9 +205,10 @@
             }
         }
         
-        // --- 3. ПЕРЕКЛЮЧЕНИЕ ЭКРАНОВ И ВОЗОБНОВЛЕНИЕ КАМЕРЫ ---
+        // --- 3. ПЕРЕКЛЮЧЕНИЕ ЭКРАНОВ (Улучшенная стабильность) ---
+
         function showCollection() {
-            stopCamera(); // Останавливаем камеру при переходе в Гараж
+            stopCamera(); 
             renderGallery();
             document.getElementById('camera-screen').style.display = 'none';
             document.getElementById('collection-screen').style.display = 'block';
@@ -202,19 +217,20 @@
         function showCamera() {
             document.getElementById('collection-screen').style.display = 'none';
             document.getElementById('camera-screen').style.display = 'flex';
-            startCamera(); // Запускаем камеру обратно
+            startCamera(); 
         }
 
-        // --- 4. СОХРАНЕНИЕ (Осталось без изменений) ---
+        // --- 4. СОХРАНЕНИЕ (без изменений) ---
         function saveCar(model, image, confidence) {
-            let garage = JSON.parse(localStorage.getItem('tfjsCarsDB')) || [];
+            let garage = JSON.parse(localStorage.getItem('tfjsCarsDB_v2')) || [];
             garage.push({ id: Date.now(), model: model, image: image, confidence: confidence, date: new Date().toLocaleDateString() });
-            localStorage.setItem('tfjsCarsDB', JSON.stringify(garage));
+            localStorage.setItem('tfjsCarsDB_v2', JSON.stringify(garage));
         }
 
         function renderGallery() {
             const list = document.getElementById('list');
-            const garage = JSON.parse(localStorage.getItem('tfjsCarsDB')) || [];
+            // Используем новую базу данных для избежания конфликтов
+            const garage = JSON.parse(localStorage.getItem('tfjsCarsDB_v2')) || []; 
             document.getElementById('count').innerText = garage.length;
             list.innerHTML = '';
             
@@ -234,7 +250,7 @@
             });
         }
         
-        // Инициализация при старте
+        // Инициализация
         init();
         renderGallery();
     </script>
