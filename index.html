@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CarDex</title>
+  <title>CarDex (без регистрации)</title>
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; background:#0b0b0f; color:#fff; margin:0; padding:16px; }
     h1 { font-size:28px; margin-bottom:8px; }
@@ -17,17 +17,7 @@
 </head>
 <body>
   <h1>🚗 CarDex</h1>
-  <p class="muted">Поймай все автомобили. Фото → распознавание → коллекция.</p>
-
-  <div class="card" id="auth">
-    <h3>Аккаунт</h3>
-    <input id="email" placeholder="email" />
-    <input id="password" type="password" placeholder="пароль" />
-    <br/><br/>
-    <button onclick="login()">Войти / Регистрация</button>
-    <button onclick="logout()">Выйти</button>
-    <p id="userStatus" class="muted"></p>
-  </div>
+  <p class="muted">Фото → распознавание → коллекция (без регистрации)</p>
 
   <div class="card">
     <h3>Сканировать автомобиль</h3>
@@ -40,78 +30,17 @@
   <div class="card">
     <h3>Моя коллекция</h3>
     <div id="collection" class="grid"></div>
+    <br/>
+    <button onclick="clearCollection()">Очистить коллекцию</button>
   </div>
 
-  <!-- Firebase (аккаунты + сохранение) -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
   <script>
-    // ⚠️ ВСТАВЬ СВОИ ДАННЫЕ FIREBASE
-    const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT.firebaseapp.com",
-      projectId: "YOUR_PROJECT",
-    };
-    firebase.initializeApp(firebaseConfig);
+    const STORAGE_KEY = 'cardex_collection';
 
-    const auth = firebase.auth();
-    const db = firebase.firestore();
-
-    auth.onAuthStateChanged(user => {
-      document.getElementById('userStatus').innerText = user ? `Вошёл как ${user.email}` : 'Не авторизован';
-      if (user) loadCollection();
-    });
-
-    function login() {
-      const email = email.value;
-      const pass = password.value;
-      auth.signInWithEmailAndPassword(email, pass)
-        .catch(() => auth.createUserWithEmailAndPassword(email, pass));
-    }
-
-    function logout() { auth.signOut(); }
-
-    async function scanCar() {
-      const file = photoInput.files[0];
-      if (!file) return alert('Выбери фото');
-
-      result.innerText = 'Распознаю автомобиль...';
-
-      // ⚠️ ЗАГЛУШКА ML
-      // Реально "очень хорошо" — только через сервер или платный API
-      const fakeResult = {
-        make: 'BMW',
-        model: 'M5 F90',
-        confidence: 0.87
-      };
-
-      result.innerText = `${fakeResult.make} ${fakeResult.model} (${Math.round(fakeResult.confidence*100)}%)`;
-
-      const user = auth.currentUser;
-      if (!user) return alert('Войди в аккаунт');
-
-      const reader = new FileReader();
-      reader.onload = async () => {
-        await db.collection('users').doc(user.uid).collection('cars').add({
-          make: fakeResult.make,
-          model: fakeResult.model,
-          image: reader.result,
-          created: Date.now()
-        });
-        loadCollection();
-      };
-      reader.readAsDataURL(file);
-    }
-
-    async function loadCollection() {
-      const user = auth.currentUser;
-      if (!user) return;
-      const snap = await db.collection('users').doc(user.uid).collection('cars').get();
+    function loadCollection() {
+      const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
       collection.innerHTML = '';
-      snap.forEach(doc => {
-        const c = doc.data();
+      data.forEach(c => {
         collection.innerHTML += `
           <div>
             <img src="${c.image}" />
@@ -119,6 +48,79 @@
           </div>`;
       });
     }
+
+    function saveCar(car) {
+      const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      data.push(car);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      loadCollection();
+
+    function fileToBase64(file) {
+      return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+    }
+    }
+
+    function clearCollection() {
+      if (confirm('Точно удалить всю коллекцию?')) {
+        localStorage.removeItem(STORAGE_KEY);
+        loadCollection();
+      }
+    }
+
+    async function scanCar() {
+      const file = photoInput.files[0];
+      if (!file) return alert('Выбери фото');
+
+      result.innerText = 'Распознаю автомобиль...';
+
+      // 🔴 РЕАЛЬНОЕ РАСПОЗНАВАНИЕ ЧЕРЕЗ OPENAI VISION
+      // ⚠️ КЛЮЧ В КОДЕ — ТОЛЬКО ДЛЯ ДЕМО
+      const base64 = await fileToBase64(file);
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer YOUR_OPENAI_API_KEY'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4.1-mini',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Определи марку и модель автомобиля на фото. Ответь строго в JSON: {"make":"","model":"","confidence":0.0}' },
+                { type: 'image_url', image_url: { url: base64 } }
+              ]
+            }
+          ]
+        })
+      });
+
+      const data = await response.json();
+      const parsed = JSON.parse(data.choices[0].message.content);
+
+      const fakeResult = parsed;
+
+      result.innerText = `${fakeResult.make} ${fakeResult.model} (${Math.round(fakeResult.confidence*100)}%)`;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        saveCar({
+          make: fakeResult.make,
+          model: fakeResult.model,
+          image: reader.result,
+          created: Date.now()
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+
+    loadCollection();
   </script>
 </body>
 </html>
