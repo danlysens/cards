@@ -3,220 +3,198 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Авто-Коллекция: Поймай Их Все!</title>
+    <title>CarDex 🏎️</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        /* Базовые стили CSS */
-        body {
-            font-family: 'Arial', sans-serif;
-            background-color: #f4f4f9;
-            color: #333;
-            margin: 0;
-            padding: 0;
-            text-align: center;
-        }
-
-        .container {
-            max-width: 800px;
-            margin: 50px auto;
-            padding: 20px;
-            background: #fff;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-            border-radius: 12px;
-        }
-
-        h1 {
-            color: #007bff;
-            margin-bottom: 30px;
-        }
-
-        /* Стиль для секции аккаунта */
-        .account-info {
-            background-color: #e9f7ff;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border-left: 5px solid #007bff;
-        }
-
-        /* Стиль для загрузчика файлов */
-        .uploader {
-            border: 2px dashed #ccc;
-            padding: 40px 20px;
+        /* --- СТИЛИ (CSS) --- */
+        body { font-family: 'Roboto', sans-serif; background: #222; color: white; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
+        
+        /* Экран камеры */
+        #camera-screen { flex: 1; position: relative; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; background: #000; overflow: hidden; }
+        video { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1; }
+        
+        /* Интерфейс сканирования */
+        .overlay { position: relative; z-index: 2; width: 100%; padding-bottom: 20px; display: flex; justify-content: center; align-items: center; background: linear-gradient(transparent, rgba(0,0,0,0.8)); }
+        
+        #scan-btn {
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            border: 5px solid white;
+            background: rgba(255, 50, 50, 0.8);
+            box-shadow: 0 0 15px rgba(255, 50, 50, 0.6);
             cursor: pointer;
-            border-radius: 8px;
-            transition: background-color 0.3s;
+            transition: transform 0.1s;
         }
+        #scan-btn:active { transform: scale(0.9); }
 
-        .uploader:hover {
-            background-color: #f0f0f0;
+        /* Экран коллекции */
+        #collection-screen { display: none; background: #f5f5f5; color: #333; height: 100%; overflow-y: auto; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .card { background: white; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; display: flex; }
+        .card img { width: 100px; height: 80px; object-fit: cover; }
+        .card-info { padding: 10px; display: flex; flex-direction: column; justify-content: center; }
+        .card-title { font-weight: bold; font-size: 1.1em; }
+        .card-date { font-size: 0.8em; color: #888; }
+        
+        .nav-btn { padding: 10px 20px; background: #333; color: white; border: none; border-radius: 5px; cursor: pointer; }
+
+        /* Анимация сканирования */
+        .scanner-line {
+            position: absolute; top: 0; left: 0; width: 100%; height: 2px;
+            background: #00ff00;
+            box-shadow: 0 0 10px #00ff00;
+            z-index: 3;
+            animation: scanAnim 2s infinite linear;
+            display: none;
         }
-
-        #file-input {
-            display: none; /* Скрываем стандартный инпут */
-        }
-
-        .collection {
-            margin-top: 30px;
-            text-align: left;
-        }
-
-        .car-item {
-            background: #e3f7e3;
-            border: 1px solid #c9ecc9;
-            padding: 10px;
-            margin-top: 10px;
-            border-radius: 6px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .recognized-image {
-            max-width: 100px;
-            height: auto;
-            border-radius: 4px;
-            margin-right: 15px;
-        }
-
-        .status {
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #ffebcc;
-            color: #e65100;
-            border-radius: 6px;
-            display: none; /* Сначала скрыто */
+        @keyframes scanAnim {
+            0% { top: 0%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
         }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h1>🚗 Авто-Коллекция: Поймай Их Все!</h1>
-
-        <div class="account-info">
-            <p><strong>Пользователь:</strong> <span id="username">Гость</span> | 
-            <button onclick="loginLogout()">Войти / Выйти</button></p>
-            <p><strong>Твоя Коллекция:</strong> <span id="collection-count">0</span> автомобилей</p>
-        </div>
-
-        <hr>
-
-        <h2>📸 Сфотографируй Тачку!</h2>
+    <div id="camera-screen">
+        <video id="video" autoplay playsinline></video>
+        <div class="scanner-line" id="scanner-line"></div>
+        <canvas id="canvas" style="display:none;"></canvas>
         
-        <div class="uploader" onclick="document.getElementById('file-input').click()">
-            <p>Нажми, чтобы загрузить фото автомобиля</p>
-            <input type="file" id="file-input" accept="image/*">
+        <div class="overlay">
+            <div style="position: absolute; left: 20px; bottom: 35px;">
+                <button onclick="showCollection()" class="nav-btn">🏆 Гараж</button>
+            </div>
+            <button id="scan-btn" onclick="captureAndScan()"></button>
         </div>
+    </div>
 
-        <div id="status-message" class="status"></div>
-
-        <div class="collection">
-            <h2>Твои Найденные Авто:</h2>
-            <div id="car-list">
-                </div>
+    <div id="collection-screen">
+        <div class="header">
+            <h2>Мой Гараж (<span id="count">0</span>)</h2>
+            <button onclick="showCamera()" class="nav-btn">📷 Сканировать</button>
         </div>
-
+        <div id="list">
+            </div>
     </div>
 
     <script>
-        let is_logged_in = false;
-        let car_collection = [];
-        const statusMessage = document.getElementById('status-message');
-        const carList = document.getElementById('car-list');
-        const collectionCount = document.getElementById('collection-count');
-        const usernameSpan = document.getElementById('username');
+        // --- 1. НАСТРОЙКА КАМЕРЫ ---
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment" } // Использует заднюю камеру на телефоне
+                });
+                video.srcObject = stream;
+            } catch (err) {
+                alert("Ошибка доступа к камере! Разрешите доступ в браузере.");
+            }
+        }
+        
+        // Запускаем камеру при старте
+        startCamera();
 
-        // ИМИТАЦИЯ ДАННЫХ ДЛЯ РАСПОЗНАВАНИЯ (это не настоящее ML!)
-        const dummyCars = [
-            { model: "Tesla Model 3", make: "Tesla", year: 2020, rarity: "Обычный" },
-            { model: "Porsche 911 Turbo S", make: "Porsche", year: 2022, rarity: "Редкий" },
-            { model: "LADA Granta", make: "АвтоВАЗ", year: 2018, rarity: "Легендарный" },
+        // --- 2. ЛОГИКА "ИСКУССТВЕННОГО ИНТЕЛЛЕКТА" ---
+        // Поскольку на Github Pages нельзя поставить сложный Python,
+        // мы имитируем распознавание для прототипа.
+        // (Ниже я объясню, как подключить настоящий TF.js)
+        
+        const carDatabase = [
+            "BMW M5 Competition", "Audi RS6 Avant", "Mercedes-AMG G63",
+            "Porsche 911 Turbo S", "Lamborghini Huracan", "Toyota Supra MK4",
+            "Nissan GTR R35", "Ford Mustang Shelby", "Dodge Challenger",
+            "Tesla Model S Plaid", "Lada Niva Legend"
         ];
 
-        function loginLogout() {
-            is_logged_in = !is_logged_in;
-            if (is_logged_in) {
-                const user = prompt("Введите имя пользователя:", "Твой_Ник");
-                usernameSpan.textContent = user || "Коллекционер";
-                showMessage(`Добро пожаловать, ${usernameSpan.textContent}!`, 'success');
-            } else {
-                usernameSpan.textContent = "Гость";
-                car_collection = [];
-                updateCollectionUI();
-                showMessage('Вы вышли из системы.', 'info');
-            }
+        function mockAI_Identify() {
+            // Берем случайную машину из списка
+            const randomCar = carDatabase[Math.floor(Math.random() * carDatabase.length)];
+            const accuracy = (Math.random() * (99 - 85) + 85).toFixed(1); // Случайная точность
+            return { model: randomCar, accuracy: accuracy };
         }
 
-        function updateCollectionUI() {
-            carList.innerHTML = '';
-            collectionCount.textContent = car_collection.length;
-            if (car_collection.length === 0) {
-                carList.innerHTML = '<p>Пока что в коллекции пусто. Загрузи первое фото!</p>';
-            } else {
-                car_collection.forEach(car => {
-                    const carDiv = document.createElement('div');
-                    carDiv.className = 'car-item';
-                    
-                    // Отображение заглушки фото (для реального приложения нужно отображать загруженное фото)
-                    const img = document.createElement('img');
-                    img.src = car.imageURL || 'https://via.placeholder.com/100x60?text=Car'; // Заглушка изображения
-                    img.alt = car.model;
-                    img.className = 'recognized-image';
+        // --- 3. ФУНКЦИИ ПРИЛОЖЕНИЯ ---
 
-                    carDiv.innerHTML = `
-                        <div>
-                            <strong>${car.make} ${car.model}</strong> (${car.year})<br>
-                            <small>Редкость: ${car.rarity}</small>
-                        </div>
-                        <small>СОХРАНЕНО</small>
-                    `;
-                    carDiv.prepend(img); // Добавляем изображение
-                    carList.appendChild(carDiv);
-                });
-            }
-        }
-
-        document.getElementById('file-input').addEventListener('change', function(event) {
-            if (!is_logged_in) {
-                showMessage("Сначала нужно войти в аккаунт, чтобы сохранять авто!", 'error');
-                return;
-            }
-
-            const file = event.target.files[0];
-            if (file) {
-                showMessage(`Загрузка файла: ${file.name}...`, 'info');
-                
-                // ИМИТАЦИЯ РАБОТЫ СЕРВЕРА И РАСПОЗНАВАНИЯ
-                setTimeout(() => {
-                    // Выбираем случайную машину из списка-заглушки
-                    const recognizedCar = dummyCars[Math.floor(Math.random() * dummyCars.length)];
-                    
-                    // Создаем URL для загруженного изображения для отображения
-                    const imageURL = URL.createObjectURL(file);
-
-                    const newCar = { ...recognizedCar, imageURL: imageURL }; // Добавляем URL к данным машины
-                    car_collection.push(newCar);
-                    
-                    updateCollectionUI();
-                    showMessage(`✅ Найдено! Добавлено в коллекцию: ${recognizedCar.make} ${recognizedCar.model}!`, 'success');
-                }, 2000); // Задержка для имитации загрузки и обработки
-            }
-        });
-
-        function showMessage(message, type) {
-            statusMessage.textContent = message;
-            statusMessage.style.backgroundColor = type === 'success' ? '#d4edda' : type === 'info' ? '#cce5ff' : '#f8d7da';
-            statusMessage.style.color = type === 'success' ? '#155724' : type === 'info' ? '#004085' : '#721c24';
-            statusMessage.style.display = 'block';
+        function captureAndScan() {
+            // Эффект сканирования
+            document.getElementById('scanner-line').style.display = 'block';
             
-            // Скрыть через 5 секунд
+            // Задержка для реализма
             setTimeout(() => {
-                statusMessage.style.display = 'none';
-            }, 5000);
+                // Делаем снимок
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                const imageData = canvas.toDataURL('image/jpeg'); // Фото в формате base64
+                
+                // "Распознаем"
+                const result = mockAI_Identify();
+                
+                // Сохраняем
+                saveCar(result.model, imageData);
+                
+                document.getElementById('scanner-line').style.display = 'none';
+                alert(`🎯 Найдено: ${result.model}\nТочность: ${result.accuracy}%`);
+                showCollection();
+            }, 1500);
         }
 
-        // Инициализация интерфейса
-        updateCollectionUI();
+        function saveCar(model, image) {
+            let garage = JSON.parse(localStorage.getItem('myCars')) || [];
+            
+            const newCar = {
+                id: Date.now(),
+                model: model,
+                image: image,
+                date: new Date().toLocaleDateString()
+            };
+            
+            garage.push(newCar);
+            localStorage.setItem('myCars', JSON.stringify(garage));
+            renderGallery();
+        }
+
+        function renderGallery() {
+            const list = document.getElementById('list');
+            const garage = JSON.parse(localStorage.getItem('myCars')) || [];
+            document.getElementById('count').innerText = garage.length;
+            
+            list.innerHTML = '';
+            
+            // Показываем новые сверху (reverse)
+            garage.reverse().forEach(car => {
+                const item = `
+                    <div class="card">
+                        <img src="${car.image}" alt="car">
+                        <div class="card-info">
+                            <div class="card-title">${car.model}</div>
+                            <div class="card-date">Поймана: ${car.date}</div>
+                        </div>
+                    </div>
+                `;
+                list.innerHTML += item;
+            });
+        }
+
+        // --- 4. ПЕРЕКЛЮЧЕНИЕ ЭКРАНОВ ---
+        function showCollection() {
+            renderGallery();
+            document.getElementById('camera-screen').style.display = 'none';
+            document.getElementById('collection-screen').style.display = 'block';
+        }
+
+        function showCamera() {
+            document.getElementById('collection-screen').style.display = 'none';
+            document.getElementById('camera-screen').style.display = 'flex';
+        }
+        
+        // Загрузка галереи при старте
+        renderGallery();
+
     </script>
 </body>
 </html>
