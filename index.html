@@ -75,52 +75,47 @@
       const file = photoInput.files[0];
       if (!file) return alert('Выбери фото');
 
-      result.innerText = 'Распознаю автомобиль...';
+      result.innerText = 'Распознаю автомобиль (Google Vision)...';
 
-      // 🔴 РЕАЛЬНОЕ РАСПОЗНАВАНИЕ ЧЕРЕЗ OPENAI VISION
-      // ⚠️ КЛЮЧ В КОДЕ — ТОЛЬКО ДЛЯ ДЕМО
       const base64 = await fileToBase64(file);
+      const apiKey = 'AIzaSyCdfCFyza7unaVJ4XdiCDUmELnIR4F6keE';
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const res = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer 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'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'gpt-4.1-mini',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: 'Определи марку и модель автомобиля на фото. Ответь строго в JSON: {"make":"","model":"","confidence":0.0}' },
-                { type: 'image_url', image_url: { url: base64 } }
-              ]
-            }
-          ]
+          requests: [{
+            image: { content: base64.split(',')[1] },
+            features: [{ type: 'LABEL_DETECTION', maxResults: 10 }]
+          }]
         })
       });
 
-      const data = await response.json();
-      const parsed = JSON.parse(data.choices[0].message.content);
+      const data = await res.json();
+      const labels = data.responses[0].labelAnnotations || [];
 
-      const fakeResult = parsed;
+      const carLabel = labels.find(l => l.description.toLowerCase().includes('car')) || labels[0];
 
-      result.innerText = `${fakeResult.make} ${fakeResult.model} (${Math.round(fakeResult.confidence*100)}%)`;
+      const detected = {
+        make: carLabel?.description || 'Unknown',
+        model: '—',
+        confidence: carLabel?.score || 0
+      };
+
+      result.innerText = `${detected.make} (${Math.round(detected.confidence * 100)}%)`;
 
       const reader = new FileReader();
       reader.onload = () => {
         saveCar({
-          make: fakeResult.make,
-          model: fakeResult.model,
+          make: detected.make,
+          model: detected.model,
           image: reader.result,
           created: Date.now()
         });
       };
       reader.readAsDataURL(file);
-    }
 
-    loadCollection();
+      loadCollection();
   </script>
 </body>
 </html>
