@@ -3,26 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CarDex AI 🧠</title>
+    <title>CarDex Google Vision 🚀</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        /* --- СТИЛИ (те же самые, но добавим индикатор загрузки) --- */
+        /* --- СТИЛИ (только самое важное) --- */
         body { font-family: 'Roboto', sans-serif; background: #222; color: white; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
-        
         #camera-screen { flex: 1; position: relative; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; background: #000; overflow: hidden; }
         video { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1; }
         
         .overlay { position: relative; z-index: 2; width: 100%; padding-bottom: 20px; display: flex; justify-content: center; align-items: center; background: linear-gradient(transparent, rgba(0,0,0,0.8)); }
-        
-        #scan-btn {
-            width: 80px; height: 80px; border-radius: 50%; border: 5px solid white;
-            background: rgba(255, 50, 50, 0.8); box-shadow: 0 0 15px rgba(255, 50, 50, 0.6);
-            cursor: pointer; transition: transform 0.1s;
-        }
+        #scan-btn { width: 80px; height: 80px; border-radius: 50%; border: 5px solid white; background: rgba(50, 150, 255, 0.8); box-shadow: 0 0 15px rgba(50, 150, 255, 0.6); cursor: pointer; transition: transform 0.1s; }
         #scan-btn:active { transform: scale(0.9); }
         #scan-btn:disabled { background: gray; border-color: #555; cursor: not-allowed; }
 
-        /* Экран коллекции */
         #collection-screen { display: none; background: #f5f5f5; color: #333; height: 100%; overflow-y: auto; padding: 20px; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         .card { background: white; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; display: flex; }
@@ -34,9 +27,9 @@
         /* Лоадер */
         #loader {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            z-index: 10; display: none; background: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; text-align: center;
+            z-index: 10; display: none; background: rgba(0,0,0,0.7); color: white; padding: 20px; border-radius: 10px; text-align: center;
         }
-        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #4285f4; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
@@ -48,7 +41,7 @@
         
         <div id="loader">
             <div class="spinner"></div>
-            <div>Распознаю авто...<br>Ищу в базе...</div>
+            <div>Сканирование Google Vision...</div>
         </div>
 
         <div class="overlay">
@@ -69,14 +62,12 @@
 
     <script>
         // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        // ВСТАВЬ СЮДА СВОЙ ТОКЕН ОТ HUGGING FACE (начинается на hf_)
-        const HF_TOKEN = "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"; 
+        // ВСТАВЬ СЮДА СВОЙ КЛЮЧ GOOGLE VISION API
+        const GOOGLE_API_KEY = "ВСТАВЬ_СВОЙ_КЛЮЧ_СЮДА"; 
         // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-        // Используем модель, специально обученную на автомобилях
-        // (dima806/car_brand_model_classification - одна из популярных моделей)
-        const MODEL_URL = "https://api-inference.huggingface.co/models/dima806/car_brand_model_classification";
-
+        const GOOGLE_VISION_URL = `https://vision.googleapis.com/v1/images:annotate?key=${GOOGLE_API_KEY}`;
+        
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const loader = document.getElementById('loader');
@@ -94,24 +85,14 @@
             }
         }
         startCamera();
-
-        // 2. Реальное распознавание через API
-        async function query(blob) {
-            const response = await fetch(MODEL_URL, {
-                headers: {
-                    Authorization: `Bearer ${HF_TOKEN}`,
-                    "Content-Type": "application/octet-stream",
-                },
-                method: "POST",
-                body: blob,
-            });
-            const result = await response.json();
-            return result;
-        }
-
-        // 3. Снимок и отправка
-        function captureAndIdentify() {
-            // Блокируем кнопку
+        
+        // 2. Логика распознавания Google Vision
+        async function captureAndIdentify() {
+            if (GOOGLE_API_KEY === "ВСТАВЬ_СВОЙ_КЛЮЧ_СЮДА") {
+                alert("ОШИБКА: Сначала вставьте свой Google API Key в код!");
+                return;
+            }
+            
             scanBtn.disabled = true;
             loader.style.display = 'block';
 
@@ -119,58 +100,82 @@
             canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0);
 
-            // Конвертируем Canvas в Blob (файл) для отправки
-            canvas.toBlob(async function(blob) {
-                try {
-                    // ОТПРАВЛЯЕМ В НЕЙРОСЕТЬ
-                    const results = await query(blob);
-                    
-                    console.log(results); // Для отладки (смотри в консоли браузера)
+            const imageDataURL = canvas.toDataURL('image/jpeg', 0.8);
+            // Удаляем "data:image/jpeg;base64," чтобы получить чистый base64
+            const base64Image = imageDataURL.split(',')[1];
 
-                    if (results.error) {
-                        // Если модель "спит", она может грузиться 20 секунд в первый раз
-                        alert("Нейросеть просыпается... Попробуй еще раз через 20 секунд!");
-                    } else if (Array.isArray(results) && results.length > 0) {
-                        // Берем самый вероятный результат
-                        const topResult = results[0];
-                        const carName = topResult.label; 
-                        const confidence = (topResult.score * 100).toFixed(1);
+            const requestBody = {
+                requests: [{
+                    image: { content: base64Image },
+                    features: [
+                        { type: "LABEL_DETECTION", maxResults: 5 }, // Общие объекты (машина, седан)
+                        { type: "LOGO_DETECTION", maxResults: 3 },  // Логотип (BMW, Toyota)
+                    ]
+                }]
+            };
 
-                        // Сохраняем фото в base64 для галереи
-                        const imageData = canvas.toDataURL('image/jpeg');
-                        
-                        saveCar(carName, imageData, confidence);
-                        alert(`🎯 Это ${carName}!\nТочность: ${confidence}%`);
-                        showCollection();
-                    } else {
-                        alert("Не удалось распознать. Попробуй подойти ближе.");
-                    }
-                } catch (error) {
-                    alert("Ошибка соединения. Проверь интернет или Токен.");
-                    console.error(error);
-                } finally {
-                    loader.style.display = 'none';
-                    scanBtn.disabled = false;
+            try {
+                const response = await fetch(GOOGLE_VISION_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody),
+                });
+
+                const data = await response.json();
+                
+                // --- АНАЛИЗ РЕЗУЛЬТАТА ---
+                let carName = "Неопознанный Автомобиль 🧐";
+                const annotations = data.responses[0];
+                
+                // 1. Сначала ищем ЛОГОТИП (самое конкретное)
+                if (annotations.logoAnnotations && annotations.logoAnnotations.length > 0) {
+                    const logo = annotations.logoAnnotations[0];
+                    carName = logo.description; // Название логотипа (BMW, Mercedes)
                 }
-            }, 'image/jpeg', 0.8);
+
+                // 2. Если логотипа нет, ищем общее описание
+                if (carName === "Неопознанный Автомобиль 🧐" && annotations.labelAnnotations && annotations.labelAnnotations.length > 0) {
+                    const carLabels = annotations.labelAnnotations.filter(
+                        label => label.description.toLowerCase().includes('car') || label.description.toLowerCase().includes('vehicle') || label.description.toLowerCase().includes('automobile')
+                    );
+                    if (carLabels.length > 0) {
+                        carName = carLabels[0].description; // Напр., "Седан", "Спортивный автомобиль"
+                    }
+                }
+                
+                // 3. Выводим результат
+                if (carName === "Неопознанный Автомобиль 🧐") {
+                    alert("Не удалось распознать автомобиль. Попробуй сделать фото при лучшем освещении!");
+                } else {
+                    saveCar(carName, imageDataURL);
+                    alert(`✅ Найдено: ${carName}`);
+                    showCollection();
+                }
+
+            } catch (error) {
+                alert("Ошибка API. Проверьте ключ и интернет.");
+                console.error("Fetch Error:", error);
+            } finally {
+                loader.style.display = 'none';
+                scanBtn.disabled = false;
+            }
         }
 
-        // 4. Сохранение и Галерея (LocalStorage)
-        function saveCar(model, image, confidence) {
-            let garage = JSON.parse(localStorage.getItem('realCarsDB')) || [];
+        // 3. Сохранение и Галерея (LocalStorage)
+        function saveCar(model, image) {
+            let garage = JSON.parse(localStorage.getItem('visionCarsDB')) || [];
             garage.push({
                 id: Date.now(),
                 model: model,
                 image: image,
-                confidence: confidence,
                 date: new Date().toLocaleDateString()
             });
-            localStorage.setItem('realCarsDB', JSON.stringify(garage));
+            localStorage.setItem('visionCarsDB', JSON.stringify(garage));
         }
 
         function renderGallery() {
             const list = document.getElementById('list');
-            const garage = JSON.parse(localStorage.getItem('realCarsDB')) || [];
+            const garage = JSON.parse(localStorage.getItem('visionCarsDB')) || [];
             document.getElementById('count').innerText = garage.length;
             list.innerHTML = '';
             
@@ -181,8 +186,7 @@
                         <div class="card-info">
                             <div style="font-weight:bold;">${car.model}</div>
                             <div style="font-size:0.8em; color:gray;">
-                                Точность: ${car.confidence}%<br>
-                                ${car.date}
+                                Поймана: ${car.date}
                             </div>
                         </div>
                     </div>
@@ -190,6 +194,7 @@
             });
         }
 
+        // 4. Переключение экранов
         function showCollection() {
             renderGallery();
             document.getElementById('camera-screen').style.display = 'none';
