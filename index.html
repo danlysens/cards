@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CarDex (СТАБИЛЬНЫЙ ФОТО) 📸</title>
+    <title>CarDex (СТАБИЛЬНОСТЬ+ТАЙМАУТ) ⏱️</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
     
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght400;700&display=swap" rel="stylesheet">
     <style>
         /* --- СТИЛИ --- */
         body { font-family: 'Roboto', sans-serif; background: #222; color: white; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
@@ -18,7 +18,7 @@
         
         .overlay { position: relative; z-index: 2; width: 100%; padding-bottom: 20px; display: flex; justify-content: center; align-items: center; background: linear-gradient(transparent, rgba(0,0,0,0.8)); }
         
-        /* Кнопка без текста (Пункт 3) */
+        /* Кнопка без текста */
         #scan-btn { 
             width: 80px; height: 80px; border-radius: 50%; border: 5px solid white; 
             background: rgba(50, 150, 255, 0.8); box-shadow: 0 0 15px rgba(50, 150, 255, 0.6); 
@@ -55,7 +55,7 @@
         
         <div id="loader" style="display:none;">
             <div class="spinner"></div>
-            <div>Сканирую...</div>
+            <div>Сканирую... (Таймаут 20 сек)</div>
         </div>
 
         <div class="overlay">
@@ -95,13 +95,13 @@
 
         async function startCamera() {
             try {
-                // Пытаемся получить поток камеры
+                if (stream) stream.getTracks().forEach(track => track.stop()); 
                 stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
                 video.srcObject = stream;
                 video.play();
             } catch (err) {
                 console.error("Ошибка доступа к камере:", err);
-                alert("Разрешите доступ к камере! (Или используйте кнопку 'Гараж', чтобы проверить, что ИИ загрузился)");
+                alert("Разрешите доступ к камере!");
             }
         }
         
@@ -119,10 +119,19 @@
             scanBtn.disabled = false;
         }
         
-        // --- 2. СТАБИЛЬНОЕ РАСПОЗНАВАНИЕ И СОХРАНЕНИЕ ---
+        // --- 2. ФУНКЦИЯ КЛАССИФИКАЦИИ С ТАЙМАУТОМ (КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ) ---
+
+        async function classifyWithTimeout(canvas, timeout = 20000) { // 20 секунд
+            // Используем Promise.race для конкуренции между распознаванием и таймером
+            return Promise.race([
+                model.classify(canvas),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error("Timeout: Classification took too long.")), timeout)
+                )
+            ]);
+        }
 
         async function captureAndIdentify() {
-            // Устранение Пункта 1: Не выключаем/включаем поток, а просто захватываем кадр.
             scanBtn.disabled = true;
             loader.style.display = 'block';
 
@@ -131,17 +140,16 @@
             let imageDataURL = null; 
             
             try {
-                // 1. Захват кадра на Canvas (Стабильный метод)
+                // 1. Захват кадра на Canvas
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
                 canvas.getContext('2d').drawImage(video, 0, 0);
                 imageDataURL = canvas.toDataURL('image/jpeg', 0.8);
 
-                // 2. Распознавание MobileNet (отправляем Canvas)
-                // Если тут происходит сбой, это означает, что устройство не справляется с MobileNet.
-                const predictions = await model.classify(canvas); 
+                // 2. Распознавание MobileNet с очисткой памяти (tf.tidy) и таймаутом
+                const predictions = await tf.tidy(() => classifyWithTimeout(canvas)); 
                 
-                // 3. УМНЫЙ АНАЛИЗ (Улучшение Пункта 2)
+                // 3. УМНЫЙ АНАЛИЗ
                 const carPredictions = predictions.filter(p => p.className.toLowerCase().includes('car') || p.className.toLowerCase().includes('truck') || p.className.toLowerCase().includes('suv'));
 
                 let bestMatch = null;
@@ -170,21 +178,25 @@
                         finalCarName = `Спортивный Автомобиль`;
                     } else if (finalCarName.toLowerCase().includes('suv')) {
                         finalCarName = `Внедорожник / SUV`;
+                    } else if (finalCarName.toLowerCase().includes('limousine')) {
+                        finalCarName = `Лимузин`;
                     }
-                }
-                
-                if (finalCarName === "Неопознанный Объект 🧐") {
-                     alert("Не удалось распознать автомобиль. Попробуй обновить страницу и сфокусироваться.");
                 }
 
             } catch (error) {
-                // Мягкая обработка ошибок вместо фатального сбоя
+                // Поймает ошибку таймаута или сбой ИИ
                 console.error("Ошибка распознавания MobileNet:", error);
-                finalCarName = "СБОЙ: Повтори сканирование";
-                alert("СБОЙ: Не удалось обработать кадр. Повтори сканирование.");
+                
+                if (error.message && error.message.includes("Timeout")) {
+                    finalCarName = "СБОЙ: Сканирование заняло > 20 сек";
+                    alert("Сканирование заняло слишком много времени. Попробуйте обновить страницу.");
+                } else {
+                    finalCarName = "СБОЙ: Неизвестная ошибка ИИ";
+                    alert("СБОЙ: Не удалось обработать кадр. Повторите сканирование.");
+                }
             } finally {
-                // 5. Сохранение и вывод
-                if (imageDataURL) {
+                // 5. Гарантированный сброс интерфейса
+                if (imageDataURL && !finalCarName.includes("СБОЙ")) {
                      saveCar(finalCarName, imageDataURL, confidence);
                 }
                
@@ -196,7 +208,7 @@
             }
         }
         
-        // --- 3. ПЕРЕКЛЮЧЕНИЕ ЭКРАНОВ ---
+        // --- 3. ПЕРЕКЛЮЧЕНИЕ ЭКРАНОВ И СОХРАНЕНИЕ ---
 
         function showCollection() {
             stopCamera(); 
@@ -211,16 +223,15 @@
             startCamera(); 
         }
 
-        // --- 4. СОХРАНЕНИЕ ---
         function saveCar(model, image, confidence) {
-            let garage = JSON.parse(localStorage.getItem('tfjsCarsDB_v3')) || [];
+            let garage = JSON.parse(localStorage.getItem('tfjsCarsDB_v4')) || [];
             garage.push({ id: Date.now(), model: model, image: image, confidence: confidence, date: new Date().toLocaleDateString() });
-            localStorage.setItem('tfjsCarsDB_v3', JSON.stringify(garage));
+            localStorage.setItem('tfjsCarsDB_v4', JSON.stringify(garage));
         }
 
         function renderGallery() {
             const list = document.getElementById('list');
-            const garage = JSON.parse(localStorage.getItem('tfjsCarsDB_v3')) || []; 
+            const garage = JSON.parse(localStorage.getItem('tfjsCarsDB_v4')) || []; 
             document.getElementById('count').innerText = garage.length;
             list.innerHTML = '';
             
