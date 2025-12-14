@@ -3,34 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CarDex (СТАБИЛЬНАЯ ВЕРСИЯ TF.JS) ✅</title>
+    <title>CarDex (TF.js Free) 🧠</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
     
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        /* --- СТИЛИ --- */
+        /* (Стили те же, но добавим сообщение о загрузке модели) */
         body { font-family: 'Roboto', sans-serif; background: #222; color: white; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
-        
         #camera-screen { flex: 1; position: relative; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; background: #000; overflow: hidden; }
         video { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1; }
         
         .overlay { position: relative; z-index: 2; width: 100%; padding-bottom: 20px; display: flex; justify-content: center; align-items: center; background: linear-gradient(transparent, rgba(0,0,0,0.8)); }
-        
-        /* Кнопка без текста (Пункт 3) */
-        #scan-btn { 
-            width: 80px; height: 80px; border-radius: 50%; border: 5px solid white; 
-            background: rgba(50, 150, 255, 0.8); box-shadow: 0 0 15px rgba(50, 150, 255, 0.6); 
-            cursor: pointer; transition: transform 0.1s; 
-        }
-        #scan-btn:active { transform: scale(0.9); }
+        #scan-btn { width: 80px; height: 80px; border-radius: 50%; border: 5px solid white; background: rgba(50, 150, 255, 0.8); box-shadow: 0 0 15px rgba(50, 150, 255, 0.6); cursor: pointer; transition: transform 0.1s; }
         #scan-btn:disabled { background: gray; border-color: #555; cursor: not-allowed; }
 
-        /* Лоадеры */
-        #loading-model, #loader {
+        #loading-model {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            z-index: 11; background: rgba(0,0,0,0.9); color: white; padding: 20px; border-radius: 10px; text-align: center;
+            z-index: 11; background: rgba(0,0,0,0.9); padding: 20px; border-radius: 10px; text-align: center;
         }
         .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #10b981; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -50,19 +41,14 @@
         
         <div id="loading-model">
             <div class="spinner"></div>
-            <div>Загрузка мозга ИИ... (15 МБ)</div>
-        </div>
-        
-        <div id="loader" style="display:none;">
-            <div class="spinner"></div>
-            <div>Сканирую...</div>
+            <div>Загрузка модели ИИ... (15 МБ)</div>
         </div>
 
         <div class="overlay">
             <div style="position: absolute; left: 20px; bottom: 35px;">
                 <button onclick="showCollection()" class="nav-btn">🏆 Гараж</button>
             </div>
-            <button id="scan-btn" onclick="captureAndIdentify()" disabled></button>
+            <button id="scan-btn" onclick="captureAndIdentify()" disabled>Сканировать</button>
         </div>
     </div>
 
@@ -75,170 +61,96 @@
     </div>
 
     <script>
-        let model;
-        let stream;
-
+        // --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ---
+        let model; // Переменная для хранения загруженной модели MobileNet
+        
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const loadingModel = document.getElementById('loading-model');
-        const loader = document.getElementById('loader');
         const scanBtn = document.getElementById('scan-btn');
 
-        // Список слов для умного анализа (Пункт 2)
-        const specificCarKeywords = [
-            'sports car', 'convertible', 'hatchback', 'sedan', 'minivan', 'pickup truck', 
-            'limousine', 'model t', 'station wagon', 'minibus', 'suv',
-            'porsche', 'ferrari', 'lamborghini', 'tesla', 'bmw', 'audi', 'mercedes', 'toyota', 'honda', 'nissan',
-            'jeep', 'truck', 'land rover', 'fiat', 'chevrolet', 'mustang' // Добавление марок
-        ];
-        
-        // --- 1. УПРАВЛЕНИЕ КАМЕРОЙ И ЗАГРУЗКА ИИ ---
-
-        async function startCamera() {
+        // --- 1. ЗАГРУЗКА ИИ МОДЕЛИ И КАМЕРЫ ---
+        async function init() {
+            // 1. Запуск камеры
             try {
-                // Плавное включение камеры при необходимости
-                if (stream) stream.getTracks().forEach(track => track.stop()); 
-                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
                 video.srcObject = stream;
-                video.play();
             } catch (err) {
-                console.error("Ошибка доступа к камере:", err);
                 alert("Разрешите доступ к камере!");
             }
-        }
-        
-        function stopCamera() {
-             if (stream) {
-                 stream.getTracks().forEach(track => track.stop());
-                 video.srcObject = null;
-             }
-        }
 
-        async function init() {
-            await startCamera(); 
+            // 2. Загрузка MobileNet (происходит в браузере)
             model = await mobilenet.load();
-            loadingModel.style.display = 'none';
-            scanBtn.disabled = false;
-        }
-        
-        // --- 2. РАСПОЗНАВАНИЕ (ТВОЯ ЛОГИКА + ПЕРЕДЕЛАННЫЙ ФИНАЛЬНЫЙ БЛОК) ---
+            loadingModel.style.display = 'none'; // Скрываем лоадер
+            scanBtn.disabled = false; // Активируем кнопку
+            scanBtn.innerText = 'Сделать снимок';
 
+            console.log("Модель MobileNet загружена и готова к работе!");
+        }
+        init();
+        
+        // --- 2. РАСПОЗНАВАНИЕ (РАБОТАЕТ НА ТЕЛЕФОНЕ) ---
         async function captureAndIdentify() {
-            // МИНИМАЛЬНЫЕ изменения интерфейса
             scanBtn.disabled = true;
-            loader.style.display = 'block';
+            scanBtn.innerText = 'Сканирую...';
 
-            let finalCarName = "Неопознанный Объект 🧐";
-            let confidence = 0;
-            let imageDataURL = null; 
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+
+            // 1. Распознавание с помощью MobileNet
+            const predictions = await model.classify(canvas);
             
-            try {
-                // 1. Захват кадра на Canvas
-                canvas.width = video.videoWidth;
-                canvas.height = video.height; // Используем height из видео
-                canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-                imageDataURL = canvas.toDataURL('image/jpeg', 0.8);
-
-                // 2. Обработка с помощью MobileNet
-                const predictions = await tf.tidy(() => model.classify(canvas)); 
-                
-                // 3. Создаем список потенциальных меток
-                const labels = predictions.map(p => ({
-                    name: p.className.toLowerCase(),
-                    score: p.probability
-                }));
-                
-                let bestMatch = null;
-                
-                for (const label of labels) {
-                    // Если метка содержит конкретное ключевое слово (например, 'bmw', 'sedan')
-                    const keywordFound = specificCarKeywords.find(kw => label.name.includes(kw));
-
-                    if (keywordFound) {
-                        // Если это конкретная метка ИЛИ если это лучшее совпадение до сих пор
-                        if (!bestMatch || label.score > bestMatch.score) {
-                            bestMatch = label;
-                        }
-                    }
-                }
-
-                if (bestMatch) {
-                    // Приводим название к более читаемому виду
-                    finalCarName = bestMatch.name.split(',')[0].trim().replace('_', ' ');
-                    confidence = (bestMatch.score * 100).toFixed(1);
-
-                    // Добавление "старая/новая"
-                    if (finalCarName.includes('model t')) {
-                        finalCarName = `Старинный Ford Model T`;
-                    } else if (finalCarName.includes('sports car')) {
-                        finalCarName = `Спортивный Автомобиль`;
-                    } else if (finalCarName.includes('suv')) {
-                        finalCarName = `Внедорожник / SUV`;
-                    }
-
-                } else {
-                    // Если ничего не нашли по умному фильтру, берем просто "машина"
-                    const genericCar = labels.find(l => l.name.includes('car') || l.name.includes('vehicle'));
-                    if (genericCar) {
-                        finalCarName = genericCar.name.split(',')[0].trim().replace('_', ' ');
-                        confidence = (genericCar.score * 100).toFixed(1);
-                    } else {
-                        // Если вообще не нашли машину, берем лучший результат
-                        finalCarName = labels[0].name.split(',')[0].trim().replace('_', ' ');
-                        confidence = (labels[0].score * 100).toFixed(1);
-                    }
-                }
-                
-                if (finalCarName === "Неопознанный Объект 🧐") {
-                     alert("Не удалось распознать автомобиль. Попробуй обновить страницу и сфокусироваться.");
-                }
-
-            } catch (error) {
-                // Обработка ошибки
-                console.error("Ошибка распознавания MobileNet:", error);
-                finalCarName = "СБОЙ: Повтори сканирование";
-                alert("СБОЙ: Не удалось обработать кадр. Повтори сканирование.");
-            } finally {
-                // 5. Сохранение и сброс интерфейса (гарантированно)
-                if (imageDataURL && !finalCarName.includes("СБОЙ")) {
-                     saveCar(finalCarName, imageDataURL, confidence);
-                }
-               
-                alert(`✅ Результат: ${finalCarName}\nУверенность: ${confidence}%`);
-                
-                loader.style.display = 'none';
-                scanBtn.disabled = false;
-                showCollection();
+            // 2. АНАЛИЗ РЕЗУЛЬТАТА: Ищем лучшее совпадение
+            let carName = "Неопознанный Объект 🧐";
+            let confidence = 0;
+            const imageDataURL = canvas.toDataURL('image/jpeg', 0.8);
+            
+            // Ищем лучший результат, связанный с автомобилями
+            // MobileNet выдает классы типа "спортивная машина", "грузовик"
+            const carPredictions = predictions.filter(p => 
+                p.className.toLowerCase().includes('car') || 
+                p.className.toLowerCase().includes('automobile') ||
+                p.className.toLowerCase().includes('truck') ||
+                p.className.toLowerCase().includes('suv')
+            );
+            
+            if (carPredictions.length > 0) {
+                const bestPrediction = carPredictions[0];
+                carName = bestPrediction.className;
+                confidence = (bestPrediction.probability * 100).toFixed(1);
+            } else {
+                // Если не нашли машину, показываем самый вероятный объект
+                carName = predictions[0].className;
+                confidence = (predictions[0].probability * 100).toFixed(1);
             }
-        }
-        
-        // --- 3. ПЕРЕКЛЮЧЕНИЕ ЭКРАНОВ ---
 
-        function showCollection() {
-            // Камера выключается только при переходе в Гараж
-            stopCamera(); 
-            renderGallery();
-            document.getElementById('camera-screen').style.display = 'none';
-            document.getElementById('collection-screen').style.display = 'block';
-        }
+            // 3. Вывод
+            saveCar(carName, imageDataURL, confidence);
 
-        function showCamera() {
-            document.getElementById('collection-screen').style.display = 'none';
-            document.getElementById('camera-screen').style.display = 'flex';
-            // Камера включается только при возврате из Гаража
-            startCamera(); 
+            alert(`✅ Найдено (TF.js): ${carName}\nУверенность: ${confidence}%`);
+            showCollection();
+            
+            scanBtn.disabled = false;
+            scanBtn.innerText = 'Сделать снимок';
         }
 
-        // --- 4. СОХРАНЕНИЕ ---
+        // --- 3. СОХРАНЕНИЕ И ГАЛЕРЕЯ (LocalStorage) ---
         function saveCar(model, image, confidence) {
-            let garage = JSON.parse(localStorage.getItem('tfjsCarsDB_vFinalV2')) || [];
-            garage.push({ id: Date.now(), model: model, image: image, confidence: confidence, date: new Date().toLocaleDateString() });
-            localStorage.setItem('tfjsCarsDB_vFinalV2', JSON.stringify(garage));
+            let garage = JSON.parse(localStorage.getItem('tfjsCarsDB')) || [];
+            garage.push({
+                id: Date.now(),
+                model: model,
+                image: image,
+                confidence: confidence,
+                date: new Date().toLocaleDateString()
+            });
+            localStorage.setItem('tfjsCarsDB', JSON.stringify(garage));
         }
 
         function renderGallery() {
             const list = document.getElementById('list');
-            const garage = JSON.parse(localStorage.getItem('tfjsCarsDB_vFinalV2')) || []; 
+            const garage = JSON.parse(localStorage.getItem('tfjsCarsDB')) || [];
             document.getElementById('count').innerText = garage.length;
             list.innerHTML = '';
             
@@ -257,8 +169,18 @@
                 `;
             });
         }
-        
-        init();
+
+        // --- 4. ПЕРЕКЛЮЧЕНИЕ ЭКРАНОВ ---
+        function showCollection() {
+            renderGallery();
+            document.getElementById('camera-screen').style.display = 'none';
+            document.getElementById('collection-screen').style.display = 'block';
+        }
+        function showCamera() {
+            document.getElementById('collection-screen').style.display = 'none';
+            document.getElementById('camera-screen').style.display = 'flex';
+        }
+
         renderGallery();
     </script>
 </body>
