@@ -10,16 +10,24 @@
     
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        /* (Стили те же, но добавим сообщение о загрузке модели) */
+        /* --- СТИЛИ --- */
         body { font-family: 'Roboto', sans-serif; background: #222; color: white; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
         #camera-screen { flex: 1; position: relative; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; background: #000; overflow: hidden; }
         video { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1; }
         
         .overlay { position: relative; z-index: 2; width: 100%; padding-bottom: 20px; display: flex; justify-content: center; align-items: center; background: linear-gradient(transparent, rgba(0,0,0,0.8)); }
-        #scan-btn { width: 80px; height: 80px; border-radius: 50%; border: 5px solid white; background: rgba(50, 150, 255, 0.8); box-shadow: 0 0 15px rgba(50, 150, 255, 0.6); cursor: pointer; transition: transform 0.1s; }
+        
+        /* Кнопка без текста, только круг */
+        #scan-btn { 
+            width: 80px; height: 80px; border-radius: 50%; border: 5px solid white; 
+            background: rgba(50, 150, 255, 0.8); box-shadow: 0 0 15px rgba(50, 150, 255, 0.6); 
+            cursor: pointer; transition: transform 0.1s; 
+        }
+        #scan-btn:active { transform: scale(0.9); }
         #scan-btn:disabled { background: gray; border-color: #555; cursor: not-allowed; }
 
-        #loading-model {
+        /* Лоадер */
+        #loading-model, #loader {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             z-index: 11; background: rgba(0,0,0,0.9); padding: 20px; border-radius: 10px; text-align: center;
         }
@@ -41,14 +49,19 @@
         
         <div id="loading-model">
             <div class="spinner"></div>
-            <div>Загрузка модели ИИ... (15 МБ)</div>
+            <div>Загрузка мозга ИИ... (15 МБ)</div>
+        </div>
+        
+        <div id="loader" style="display:none;">
+            <div class="spinner"></div>
+            <div>Сканирую...</div>
         </div>
 
         <div class="overlay">
             <div style="position: absolute; left: 20px; bottom: 35px;">
                 <button onclick="showCollection()" class="nav-btn">🏆 Гараж</button>
             </div>
-            <button id="scan-btn" onclick="captureAndIdentify()" disabled>Сканировать</button>
+            <button id="scan-btn" onclick="captureAndIdentify()" disabled></button>
         </div>
     </div>
 
@@ -61,90 +74,141 @@
     </div>
 
     <script>
-        // --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ---
-        let model; // Переменная для хранения загруженной модели MobileNet
-        
+        let model;
+        let stream; // Для хранения потока камеры
+
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const loadingModel = document.getElementById('loading-model');
+        const loader = document.getElementById('loader');
         const scanBtn = document.getElementById('scan-btn');
 
-        // --- 1. ЗАГРУЗКА ИИ МОДЕЛИ И КАМЕРЫ ---
-        async function init() {
-            // 1. Запуск камеры
+        // Список слов, которые MobileNet может использовать для описания машин
+        const specificCarKeywords = [
+            'sports car', 'convertible', 'hatchback', 'sedan', 'minivan', 
+            'pickup truck', 'limousine', 'model t', 'beach wagon', 'station wagon',
+            // Конкретные марки, которые MobileNet иногда знает
+            'porsche', 'ferrari', 'tesla', 'bmw', 'audi', 'mercedes', 'ford', 'chevrolet'
+        ];
+        
+        // --- 1. УПРАВЛЕНИЕ КАМЕРОЙ (ИСПРАВЛЕНИЕ П.1) ---
+
+        async function startCamera() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
                 video.srcObject = stream;
+                video.play();
             } catch (err) {
+                console.error("Ошибка доступа к камере:", err);
                 alert("Разрешите доступ к камере!");
             }
-
-            // 2. Загрузка MobileNet (происходит в браузере)
-            model = await mobilenet.load();
-            loadingModel.style.display = 'none'; // Скрываем лоадер
-            scanBtn.disabled = false; // Активируем кнопку
-            scanBtn.innerText = 'Сделать снимок';
-
-            console.log("Модель MobileNet загружена и готова к работе!");
         }
-        init();
         
-        // --- 2. РАСПОЗНАВАНИЕ (РАБОТАЕТ НА ТЕЛЕФОНЕ) ---
-        async function captureAndIdentify() {
-            scanBtn.disabled = true;
-            scanBtn.innerText = 'Сканирую...';
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
+        }
 
+        async function init() {
+            // Запуск камеры при загрузке страницы
+            await startCamera(); 
+
+            // Загрузка MobileNet
+            model = await mobilenet.load();
+            loadingModel.style.display = 'none';
+            scanBtn.disabled = false;
+        }
+        
+        // --- 2. РАСПОЗНАВАНИЕ (УЛУЧШЕНИЕ П.2) ---
+        async function captureAndIdentify() {
+            // 1. Блокировка интерфейса
+            scanBtn.disabled = true;
+            loader.style.display = 'block';
+            stopCamera(); // Остановка потока перед снимком
+
+            // 2. Снимок
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0);
 
-            // 1. Распознавание с помощью MobileNet
-            const predictions = await model.classify(canvas);
-            
-            // 2. АНАЛИЗ РЕЗУЛЬТАТА: Ищем лучшее совпадение
-            let carName = "Неопознанный Объект 🧐";
+            let finalCarName = "Неопознанный Автомобиль 🧐";
             let confidence = 0;
             const imageDataURL = canvas.toDataURL('image/jpeg', 0.8);
             
-            // Ищем лучший результат, связанный с автомобилями
-            // MobileNet выдает классы типа "спортивная машина", "грузовик"
-            const carPredictions = predictions.filter(p => 
-                p.className.toLowerCase().includes('car') || 
-                p.className.toLowerCase().includes('automobile') ||
-                p.className.toLowerCase().includes('truck') ||
-                p.className.toLowerCase().includes('suv')
-            );
-            
-            if (carPredictions.length > 0) {
-                const bestPrediction = carPredictions[0];
-                carName = bestPrediction.className;
-                confidence = (bestPrediction.probability * 100).toFixed(1);
-            } else {
-                // Если не нашли машину, показываем самый вероятный объект
-                carName = predictions[0].className;
-                confidence = (predictions[0].probability * 100).toFixed(1);
+            try {
+                // 3. Обработка ИИ
+                const predictions = await model.classify(canvas);
+
+                // 4. УМНЫЙ АНАЛИЗ (ищем точные типы/марки)
+                const carPredictions = predictions.filter(p => p.className.toLowerCase().includes('car') || p.className.toLowerCase().includes('truck'));
+
+                let bestMatch = null;
+
+                // Сначала ищем конкретные, редкие классы
+                for (const label of carPredictions) {
+                    const foundSpecific = specificCarKeywords.find(kw => label.className.toLowerCase().includes(kw));
+                    
+                    if (foundSpecific) {
+                        // Если нашли что-то конкретное (BMW, Model T), ставим это в приоритет
+                        bestMatch = { name: label.className, score: label.probability };
+                        break; // Выходим, так как нашли лучший результат
+                    }
+                }
+
+                // Если не нашли конкретную марку, берем самый вероятный класс, связанный с машиной
+                if (!bestMatch && carPredictions.length > 0) {
+                    bestMatch = { name: carPredictions[0].className, score: carPredictions[0].probability };
+                }
+                
+                // 5. Форматирование результата
+                if (bestMatch) {
+                    // Берем только первое слово (самое главное), убираем запятые и нижние подчеркивания
+                    finalCarName = bestMatch.name.split(',')[0].trim().replace('_', ' ');
+                    confidence = (bestMatch.score * 100).toFixed(1);
+
+                    // Добавляем простое определение "старая/новая" на основе MobileNet
+                    if (finalCarName.toLowerCase().includes('model t')) {
+                        finalCarName = `Старинный Ford Model T`;
+                    } else if (finalCarName.toLowerCase().includes('limousine')) {
+                        finalCarName = `Лимузин`;
+                    } else if (finalCarName.toLowerCase().includes('sports car')) {
+                        finalCarName = `Спортивный автомобиль`;
+                    }
+                }
+            } catch (error) {
+                console.error("Ошибка распознавания:", error);
+                finalCarName = "Ошибка ИИ";
+            } finally {
+                // 6. Сохранение и вывод
+                saveCar(finalCarName, imageDataURL, confidence);
+                alert(`✅ Найдено: ${finalCarName}\nУверенность: ${confidence}%`);
+                
+                loader.style.display = 'none';
+                scanBtn.disabled = false;
+                showCollection();
             }
-
-            // 3. Вывод
-            saveCar(carName, imageDataURL, confidence);
-
-            alert(`✅ Найдено (TF.js): ${carName}\nУверенность: ${confidence}%`);
-            showCollection();
-            
-            scanBtn.disabled = false;
-            scanBtn.innerText = 'Сделать снимок';
+        }
+        
+        // --- 3. ПЕРЕКЛЮЧЕНИЕ ЭКРАНОВ И ВОЗОБНОВЛЕНИЕ КАМЕРЫ ---
+        function showCollection() {
+            stopCamera(); // Останавливаем камеру при переходе в Гараж
+            renderGallery();
+            document.getElementById('camera-screen').style.display = 'none';
+            document.getElementById('collection-screen').style.display = 'block';
         }
 
-        // --- 3. СОХРАНЕНИЕ И ГАЛЕРЕЯ (LocalStorage) ---
+        function showCamera() {
+            document.getElementById('collection-screen').style.display = 'none';
+            document.getElementById('camera-screen').style.display = 'flex';
+            startCamera(); // Запускаем камеру обратно
+        }
+
+        // --- 4. СОХРАНЕНИЕ (Осталось без изменений) ---
         function saveCar(model, image, confidence) {
             let garage = JSON.parse(localStorage.getItem('tfjsCarsDB')) || [];
-            garage.push({
-                id: Date.now(),
-                model: model,
-                image: image,
-                confidence: confidence,
-                date: new Date().toLocaleDateString()
-            });
+            garage.push({ id: Date.now(), model: model, image: image, confidence: confidence, date: new Date().toLocaleDateString() });
             localStorage.setItem('tfjsCarsDB', JSON.stringify(garage));
         }
 
@@ -169,18 +233,9 @@
                 `;
             });
         }
-
-        // --- 4. ПЕРЕКЛЮЧЕНИЕ ЭКРАНОВ ---
-        function showCollection() {
-            renderGallery();
-            document.getElementById('camera-screen').style.display = 'none';
-            document.getElementById('collection-screen').style.display = 'block';
-        }
-        function showCamera() {
-            document.getElementById('collection-screen').style.display = 'none';
-            document.getElementById('camera-screen').style.display = 'flex';
-        }
-
+        
+        // Инициализация при старте
+        init();
         renderGallery();
     </script>
 </body>
