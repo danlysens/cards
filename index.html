@@ -3,209 +3,272 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CarDex Google Vision 🚀</title>
+    <title>CarDex Google Vision 🚗</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+
     <style>
-        /* --- СТИЛИ (только самое важное) --- */
-        body { font-family: 'Roboto', sans-serif; background: #222; color: white; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
-        #camera-screen { flex: 1; position: relative; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; background: #000; overflow: hidden; }
-        video { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1; }
-        
-        .overlay { position: relative; z-index: 2; width: 100%; padding-bottom: 20px; display: flex; justify-content: center; align-items: center; background: linear-gradient(transparent, rgba(0,0,0,0.8)); }
-        #scan-btn { width: 80px; height: 80px; border-radius: 50%; border: 5px solid white; background: rgba(50, 150, 255, 0.8); box-shadow: 0 0 15px rgba(50, 150, 255, 0.6); cursor: pointer; transition: transform 0.1s; }
-        #scan-btn:active { transform: scale(0.9); }
-        #scan-btn:disabled { background: gray; border-color: #555; cursor: not-allowed; }
-
-        #collection-screen { display: none; background: #f5f5f5; color: #333; height: 100%; overflow-y: auto; padding: 20px; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .card { background: white; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; display: flex; }
-        .card img { width: 100px; height: 80px; object-fit: cover; }
-        .card-info { padding: 10px; display: flex; flex-direction: column; justify-content: center; }
-        
-        .nav-btn { padding: 10px 20px; background: #333; color: white; border: none; border-radius: 5px; cursor: pointer; }
-
-        /* Лоадер */
-        #loader {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            z-index: 10; display: none; background: rgba(0,0,0,0.7); color: white; padding: 20px; border-radius: 10px; text-align: center;
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: #222;
+            color: white;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
         }
-        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #4285f4; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        #camera-screen {
+            flex: 1;
+            position: relative;
+            background: black;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        video {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .overlay {
+            z-index: 2;
+            width: 100%;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(transparent, rgba(0,0,0,0.8));
+        }
+
+        #scan-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 5px solid white;
+            background: #4285f4;
+            cursor: pointer;
+        }
+
+        #scan-btn:disabled {
+            background: gray;
+            border-color: #555;
+        }
+
+        .nav-btn {
+            position: absolute;
+            left: 20px;
+            bottom: 35px;
+            padding: 10px 20px;
+            background: #333;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        #loader {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 5;
+        }
+
+        .spinner {
+            border: 4px solid #eee;
+            border-top: 4px solid #4285f4;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        #collection-screen {
+            display: none;
+            background: #f5f5f5;
+            color: #333;
+            height: 100%;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            display: flex;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .card img {
+            width: 100px;
+            object-fit: cover;
+        }
+
+        .card-info {
+            padding: 10px;
+        }
     </style>
 </head>
 <body>
 
-    <div id="camera-screen">
-        <video id="video" autoplay playsinline></video>
-        <canvas id="canvas" style="display:none;"></canvas>
-        
-        <div id="loader">
-            <div class="spinner"></div>
-            <div>Сканирование Google Vision...</div>
-        </div>
+<div id="camera-screen">
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas" hidden></canvas>
 
-        <div class="overlay">
-            <div style="position: absolute; left: 20px; bottom: 35px;">
-                <button onclick="showCollection()" class="nav-btn">🏆 Гараж</button>
+    <div id="loader">
+        <div class="spinner"></div>
+        <div>Сканирование Google Vision…</div>
+    </div>
+
+    <button class="nav-btn" onclick="showCollection()">🏆 Гараж</button>
+
+    <div class="overlay">
+        <button id="scan-btn" onclick="captureAndIdentify()"></button>
+    </div>
+</div>
+
+<div id="collection-screen">
+    <h2>Мой гараж (<span id="count">0</span>)</h2>
+    <button onclick="showCamera()">📷 Сканировать</button>
+    <div id="list"></div>
+</div>
+
+<script>
+/* 🔑 ВСТАВЬ СВОЙ GOOGLE VISION API KEY */
+const GOOGLE_API_KEY = "ТВОЙ_API_KEY_ЗДЕСЬ";
+const GOOGLE_VISION_URL =
+  `https://vision.googleapis.com/v1/images:annotate?key=${GOOGLE_API_KEY}`;
+
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const loader = document.getElementById("loader");
+const scanBtn = document.getElementById("scan-btn");
+
+/* 🎥 Камера */
+navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+    .then(stream => video.srcObject = stream)
+    .catch(() => alert("Разреши доступ к камере"));
+
+/* 📸 Сканирование */
+async function captureAndIdentify() {
+    scanBtn.disabled = true;
+    loader.style.display = "flex";
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+
+    const base64 = canvas.toDataURL("image/jpeg", 0.8).split(",")[1];
+
+    const body = {
+        requests: [{
+            image: { content: base64 },
+            features: [
+                { type: "OBJECT_LOCALIZATION", maxResults: 5 },
+                { type: "LOGO_DETECTION", maxResults: 3 },
+                { type: "LABEL_DETECTION", maxResults: 5 }
+            ]
+        }]
+    };
+
+    try {
+        const res = await fetch(GOOGLE_VISION_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+        });
+
+        const data = await res.json();
+        const r = data.responses?.[0];
+
+        if (!r || r.error) throw new Error("Vision error");
+
+        let car = "Неопознанный автомобиль";
+
+        if (r.localizedObjectAnnotations) {
+            const obj = r.localizedObjectAnnotations.find(o =>
+                o.name.toLowerCase().includes("car") ||
+                o.name.toLowerCase().includes("vehicle")
+            );
+            if (obj) car = obj.name;
+        }
+
+        if (car.includes("Неопознанный") && r.logoAnnotations?.length)
+            car = r.logoAnnotations[0].description;
+
+        if (car.includes("Неопознанный") && r.labelAnnotations?.length) {
+            const l = r.labelAnnotations.find(x =>
+                ["car","vehicle","sedan","suv","truck","automobile"]
+                .some(w => x.description.toLowerCase().includes(w))
+            );
+            if (l) car = l.description;
+        }
+
+        saveCar(car, canvas.toDataURL("image/jpeg", 0.8));
+        alert("Найдено: " + car);
+        showCollection();
+
+    } catch (e) {
+        alert("Ошибка распознавания");
+        console.error(e);
+    } finally {
+        loader.style.display = "none";
+        scanBtn.disabled = false;
+    }
+}
+
+/* 💾 LocalStorage */
+function saveCar(model, image) {
+    const db = JSON.parse(localStorage.getItem("cars")) || [];
+    db.push({ id: Date.now(), model, image, date: new Date().toLocaleDateString() });
+    localStorage.setItem("cars", JSON.stringify(db));
+}
+
+function renderGallery() {
+    const list = document.getElementById("list");
+    const db = JSON.parse(localStorage.getItem("cars")) || [];
+    document.getElementById("count").textContent = db.length;
+    list.innerHTML = "";
+
+    db.reverse().forEach(c => {
+        list.innerHTML += `
+            <div class="card">
+                <img src="${c.image}">
+                <div class="card-info">
+                    <b>${c.model}</b><br>
+                    <small>${c.date}</small>
+                </div>
             </div>
-            <button id="scan-btn" onclick="captureAndIdentify()"></button>
-        </div>
-    </div>
+        `;
+    });
+}
 
-    <div id="collection-screen">
-        <div class="header">
-            <h2>Мой Гараж (<span id="count">0</span>)</h2>
-            <button onclick="showCamera()" class="nav-btn">📷 Сканировать</button>
-        </div>
-        <div id="list"></div>
-    </div>
+/* 🔄 Экраны */
+function showCollection() {
+    renderGallery();
+    document.getElementById("camera-screen").style.display = "none";
+    document.getElementById("collection-screen").style.display = "block";
+}
 
-    <script>
-        // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        // ВСТАВЬ СЮДА СВОЙ КЛЮЧ GOOGLE VISION API
-        const GOOGLE_API_KEY = "AIzaSyCdfCFyza7unaVJ4XdiCDUmELnIR4F6keE"; 
-        // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+function showCamera() {
+    document.getElementById("collection-screen").style.display = "none";
+    document.getElementById("camera-screen").style.display = "flex";
+}
 
-        const GOOGLE_VISION_URL = `https://vision.googleapis.com/v1/images:annotate?key=${GOOGLE_API_KEY}`;
-        
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const loader = document.getElementById('loader');
-        const scanBtn = document.getElementById('scan-btn');
+renderGallery();
+</script>
 
-        // 1. Запуск камеры
-        async function startCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "environment" } 
-                });
-                video.srcObject = stream;
-            } catch (err) {
-                alert("Разрешите доступ к камере!");
-            }
-        }
-        startCamera();
-        
-        // 2. Логика распознавания Google Vision
-        async function captureAndIdentify() {
-            if (GOOGLE_API_KEY === "ВСТАВЬ_СВОЙ_КЛЮЧ_СЮДА") {
-                alert("ОШИБКА: Сначала вставьте свой Google API Key в код!");
-                return;
-            }
-            
-            scanBtn.disabled = true;
-            loader.style.display = 'block';
-
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
-
-            const imageDataURL = canvas.toDataURL('image/jpeg', 0.8);
-            // Удаляем "data:image/jpeg;base64," чтобы получить чистый base64
-            const base64Image = imageDataURL.split(',')[1];
-
-            const requestBody = {
-                requests: [{
-                    image: { content: base64Image },
-                    features: [
-                        { type: "LABEL_DETECTION", maxResults: 5 }, // Общие объекты (машина, седан)
-                        { type: "LOGO_DETECTION", maxResults: 3 },  // Логотип (BMW, Toyota)
-                    ]
-                }]
-            };
-
-            try {
-                const response = await fetch(GOOGLE_VISION_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestBody),
-                });
-
-                const data = await response.json();
-                
-                // --- АНАЛИЗ РЕЗУЛЬТАТА ---
-                let carName = "Неопознанный Автомобиль 🧐";
-                const annotations = data.responses[0];
-                
-                // 1. Сначала ищем ЛОГОТИП (самое конкретное)
-                if (annotations.logoAnnotations && annotations.logoAnnotations.length > 0) {
-                    const logo = annotations.logoAnnotations[0];
-                    carName = logo.description; // Название логотипа (BMW, Mercedes)
-                }
-
-                // 2. Если логотипа нет, ищем общее описание
-                if (carName === "Неопознанный Автомобиль 🧐" && annotations.labelAnnotations && annotations.labelAnnotations.length > 0) {
-                    const carLabels = annotations.labelAnnotations.filter(
-                        label => label.description.toLowerCase().includes('car') || label.description.toLowerCase().includes('vehicle') || label.description.toLowerCase().includes('automobile')
-                    );
-                    if (carLabels.length > 0) {
-                        carName = carLabels[0].description; // Напр., "Седан", "Спортивный автомобиль"
-                    }
-                }
-                
-                // 3. Выводим результат
-                if (carName === "Неопознанный Автомобиль 🧐") {
-                    alert("Не удалось распознать автомобиль. Попробуй сделать фото при лучшем освещении!");
-                } else {
-                    saveCar(carName, imageDataURL);
-                    alert(`✅ Найдено: ${carName}`);
-                    showCollection();
-                }
-
-            } catch (error) {
-                alert("Ошибка API. Проверьте ключ и интернет.");
-                console.error("Fetch Error:", error);
-            } finally {
-                loader.style.display = 'none';
-                scanBtn.disabled = false;
-            }
-        }
-
-        // 3. Сохранение и Галерея (LocalStorage)
-        function saveCar(model, image) {
-            let garage = JSON.parse(localStorage.getItem('visionCarsDB')) || [];
-            garage.push({
-                id: Date.now(),
-                model: model,
-                image: image,
-                date: new Date().toLocaleDateString()
-            });
-            localStorage.setItem('visionCarsDB', JSON.stringify(garage));
-        }
-
-        function renderGallery() {
-            const list = document.getElementById('list');
-            const garage = JSON.parse(localStorage.getItem('visionCarsDB')) || [];
-            document.getElementById('count').innerText = garage.length;
-            list.innerHTML = '';
-            
-            garage.reverse().forEach(car => {
-                list.innerHTML += `
-                    <div class="card">
-                        <img src="${car.image}" alt="car">
-                        <div class="card-info">
-                            <div style="font-weight:bold;">${car.model}</div>
-                            <div style="font-size:0.8em; color:gray;">
-                                Поймана: ${car.date}
-                            </div>
-                        </div>
-                    </div>
-                `;
-            });
-        }
-
-        // 4. Переключение экранов
-        function showCollection() {
-            renderGallery();
-            document.getElementById('camera-screen').style.display = 'none';
-            document.getElementById('collection-screen').style.display = 'block';
-        }
-        function showCamera() {
-            document.getElementById('collection-screen').style.display = 'none';
-            document.getElementById('camera-screen').style.display = 'flex';
-        }
-
-        renderGallery();
-    </script>
 </body>
 </html>
