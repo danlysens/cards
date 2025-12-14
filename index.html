@@ -62,6 +62,7 @@ async function init() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         video.srcObject = stream;
+        await new Promise(resolve => video.onloadedmetadata = resolve);
         await video.play();
     } catch (err) {
         alert("Разрешите доступ к камере!");
@@ -70,13 +71,11 @@ async function init() {
     }
 
     // Загружаем MobileNet через ml5.js
-    classifier = await ml5.imageClassifier('MobileNet', () => {
-        loadingModel.style.display = 'none';
-        scanBtn.disabled = false;
-        console.log("Модель MobileNet загружена!");
-    });
+    classifier = await ml5.imageClassifier('MobileNet');
+    loadingModel.style.display = 'none';
+    scanBtn.disabled = false;
+    console.log("Модель MobileNet загружена!");
 }
-init();
 
 // --- Функция сканирования ---
 async function captureAndIdentify() {
@@ -87,18 +86,12 @@ async function captureAndIdentify() {
 
     scanBtn.disabled = true;
 
-    // Классификация видео напрямую
-    classifier.classify(video, (err, results) => {
-        if (err) {
-            console.error(err);
-            scanBtn.disabled = false;
-            return;
-        }
-
+    try {
+        const results = await classifier.classify(video);
         const carName = results[0].label;
         const confidence = (results[0].confidence*100).toFixed(1);
 
-        // Делаем снимок через canvas
+        // Снимок через canvas
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
@@ -107,9 +100,12 @@ async function captureAndIdentify() {
         saveCar(carName, imageDataURL, confidence);
         alert(`✅ Найдено: ${carName}\nУверенность: ${confidence}%`);
         showCollection();
+    } catch(err) {
+        console.error(err);
+        alert("Ошибка распознавания");
+    }
 
-        scanBtn.disabled = false;
-    });
+    scanBtn.disabled = false;
 }
 
 // --- LocalStorage и галерея ---
@@ -145,6 +141,7 @@ function showCollection(){ renderGallery(); document.getElementById('camera-scre
 function showCamera(){ document.getElementById('collection-screen').style.display='none'; document.getElementById('camera-screen').style.display='flex'; }
 
 renderGallery();
+init();
 </script>
 </body>
 </html>
