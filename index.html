@@ -1,69 +1,265 @@
-// --- 2. РАСПОЗНАВАНИЕ (Улучшенная версия) ---
-        async function captureAndIdentify() {
-            scanBtn.disabled = true;
-            scanBtn.innerText = 'Сканирую...';
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CarDex (СТАБИЛЬНАЯ ВЕРСИЯ TF.JS) ✅</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- СТИЛИ --- */
+        body { font-family: 'Roboto', sans-serif; background: #222; color: white; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
+        
+        #camera-screen { flex: 1; position: relative; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; background: #000; overflow: hidden; }
+        video { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1; }
+        
+        .overlay { position: relative; z-index: 2; width: 100%; padding-bottom: 20px; display: flex; justify-content: center; align-items: center; background: linear-gradient(transparent, rgba(0,0,0,0.8)); }
+        
+        /* Кнопка без текста (Пункт 3) */
+        #scan-btn { 
+            width: 80px; height: 80px; border-radius: 50%; border: 5px solid white; 
+            background: rgba(50, 150, 255, 0.8); box-shadow: 0 0 15px rgba(50, 150, 255, 0.6); 
+            cursor: pointer; transition: transform 0.1s; 
+        }
+        #scan-btn:active { transform: scale(0.9); }
+        #scan-btn:disabled { background: gray; border-color: #555; cursor: not-allowed; }
 
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
+        /* Лоадеры */
+        #loading-model, #loader {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 11; background: rgba(0,0,0,0.9); color: white; padding: 20px; border-radius: 10px; text-align: center;
+        }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #10b981; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        #collection-screen { display: none; background: #f5f5f5; color: #333; height: 100%; overflow-y: auto; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .card { background: white; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; display: flex; }
+        .card img { width: 100px; height: 80px; object-fit: cover; }
+        .nav-btn { padding: 10px 20px; background: #333; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
 
-            // Обработка с помощью MobileNet
-            const predictions = await model.classify(canvas);
-            
-            let finalCarName = "Неопознанный Объект 🧐";
-            let confidence = 0;
-            const imageDataURL = canvas.toDataURL('image/jpeg', 0.8);
-            
-            // 1. Создаем список потенциальных меток
-            const labels = predictions.map(p => ({
-                name: p.className.toLowerCase(),
-                score: p.probability
-            }));
-            
-            // 2. Ищем конкретные марки и типы кузова (Custom Filter)
-            const carKeywords = [
-                'suv', 'truck', 'sedan', 'coupe', 'convertible', 'hatchback', 'minivan',
-                'porsche', 'ferrari', 'lamborghini', 'tesla', 'bmw', 'audi', 'mercedes', 'toyota', 'honda', 'nissan'
-            ];
+    <div id="camera-screen">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas" style="display:none;"></canvas>
+        
+        <div id="loading-model">
+            <div class="spinner"></div>
+            <div>Загрузка мозга ИИ... (15 МБ)</div>
+        </div>
+        
+        <div id="loader" style="display:none;">
+            <div class="spinner"></div>
+            <div>Сканирую...</div>
+        </div>
 
-            let bestMatch = null;
-            
-            for (const label of labels) {
-                // Если метка содержит конкретное ключевое слово (например, "Land Rover" или "SUV")
-                const keywordFound = carKeywords.find(kw => label.name.includes(kw));
+        <div class="overlay">
+            <div style="position: absolute; left: 20px; bottom: 35px;">
+                <button onclick="showCollection()" class="nav-btn">🏆 Гараж</button>
+            </div>
+            <button id="scan-btn" onclick="captureAndIdentify()" disabled></button>
+        </div>
+    </div>
 
-                if (keywordFound) {
-                    if (!bestMatch || label.score > bestMatch.score) {
-                        bestMatch = label;
-                    }
-                }
+    <div id="collection-screen">
+        <div class="header">
+            <h2>Мой Гараж (<span id="count">0</span>)</h2>
+            <button onclick="showCamera()" class="nav-btn">📷 Сканировать</button>
+        </div>
+        <div id="list"></div>
+    </div>
+
+    <script>
+        let model;
+        let stream;
+
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const loadingModel = document.getElementById('loading-model');
+        const loader = document.getElementById('loader');
+        const scanBtn = document.getElementById('scan-btn');
+
+        // Список слов для умного анализа (Пункт 2)
+        const specificCarKeywords = [
+            'sports car', 'convertible', 'hatchback', 'sedan', 'minivan', 'pickup truck', 
+            'limousine', 'model t', 'station wagon', 'minibus', 'suv',
+            'porsche', 'ferrari', 'lamborghini', 'tesla', 'bmw', 'audi', 'mercedes', 'toyota', 'honda', 'nissan',
+            'jeep', 'truck', 'land rover', 'fiat', 'chevrolet', 'mustang' // Добавление марок
+        ];
+        
+        // --- 1. УПРАВЛЕНИЕ КАМЕРОЙ И ЗАГРУЗКА ИИ ---
+
+        async function startCamera() {
+            try {
+                // Плавное включение камеры при необходимости
+                if (stream) stream.getTracks().forEach(track => track.stop()); 
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                video.srcObject = stream;
+                video.play();
+            } catch (err) {
+                console.error("Ошибка доступа к камере:", err);
+                alert("Разрешите доступ к камере!");
             }
-
-            if (bestMatch) {
-                // Приводим название к более читаемому виду
-                finalCarName = bestMatch.name.split(',')[0].trim().replace('_', ' ');
-                confidence = (bestMatch.score * 100).toFixed(1);
-            } else {
-                // Если ничего не нашли, берем просто "машина"
-                const genericCar = labels.find(l => l.name.includes('car'));
-                if (genericCar) {
-                    finalCarName = genericCar.name.split(',')[0].trim().replace('_', ' ');
-                    confidence = (genericCar.score * 100).toFixed(1);
-                } else {
-                    // Если вообще не нашли машину, берем лучший результат
-                    finalCarName = labels[0].name.split(',')[0].trim().replace('_', ' ');
-                    confidence = (labels[0].score * 100).toFixed(1);
-                }
-            }
-            
-            // 3. Вывод
-            saveCar(finalCarName, imageDataURL, confidence);
-
-            alert(`✅ Найдено: ${finalCarName}\nУверенность: ${confidence}%`);
-            showCollection();
-            
-            scanBtn.disabled = false;
-            scanBtn.innerText = 'Сделать снимок';
+        }
+        
+        function stopCamera() {
+             if (stream) {
+                 stream.getTracks().forEach(track => track.stop());
+                 video.srcObject = null;
+             }
         }
 
-        // Остальной код (init, saveCar, renderGallery и т.д.) остается прежним
+        async function init() {
+            await startCamera(); 
+            model = await mobilenet.load();
+            loadingModel.style.display = 'none';
+            scanBtn.disabled = false;
+        }
+        
+        // --- 2. РАСПОЗНАВАНИЕ (ТВОЯ ЛОГИКА + ПЕРЕДЕЛАННЫЙ ФИНАЛЬНЫЙ БЛОК) ---
+
+        async function captureAndIdentify() {
+            // МИНИМАЛЬНЫЕ изменения интерфейса
+            scanBtn.disabled = true;
+            loader.style.display = 'block';
+
+            let finalCarName = "Неопознанный Объект 🧐";
+            let confidence = 0;
+            let imageDataURL = null; 
+            
+            try {
+                // 1. Захват кадра на Canvas
+                canvas.width = video.videoWidth;
+                canvas.height = video.height; // Используем height из видео
+                canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+                imageDataURL = canvas.toDataURL('image/jpeg', 0.8);
+
+                // 2. Обработка с помощью MobileNet
+                const predictions = await tf.tidy(() => model.classify(canvas)); 
+                
+                // 3. Создаем список потенциальных меток
+                const labels = predictions.map(p => ({
+                    name: p.className.toLowerCase(),
+                    score: p.probability
+                }));
+                
+                let bestMatch = null;
+                
+                for (const label of labels) {
+                    // Если метка содержит конкретное ключевое слово (например, 'bmw', 'sedan')
+                    const keywordFound = specificCarKeywords.find(kw => label.name.includes(kw));
+
+                    if (keywordFound) {
+                        // Если это конкретная метка ИЛИ если это лучшее совпадение до сих пор
+                        if (!bestMatch || label.score > bestMatch.score) {
+                            bestMatch = label;
+                        }
+                    }
+                }
+
+                if (bestMatch) {
+                    // Приводим название к более читаемому виду
+                    finalCarName = bestMatch.name.split(',')[0].trim().replace('_', ' ');
+                    confidence = (bestMatch.score * 100).toFixed(1);
+
+                    // Добавление "старая/новая"
+                    if (finalCarName.includes('model t')) {
+                        finalCarName = `Старинный Ford Model T`;
+                    } else if (finalCarName.includes('sports car')) {
+                        finalCarName = `Спортивный Автомобиль`;
+                    } else if (finalCarName.includes('suv')) {
+                        finalCarName = `Внедорожник / SUV`;
+                    }
+
+                } else {
+                    // Если ничего не нашли по умному фильтру, берем просто "машина"
+                    const genericCar = labels.find(l => l.name.includes('car') || l.name.includes('vehicle'));
+                    if (genericCar) {
+                        finalCarName = genericCar.name.split(',')[0].trim().replace('_', ' ');
+                        confidence = (genericCar.score * 100).toFixed(1);
+                    } else {
+                        // Если вообще не нашли машину, берем лучший результат
+                        finalCarName = labels[0].name.split(',')[0].trim().replace('_', ' ');
+                        confidence = (labels[0].score * 100).toFixed(1);
+                    }
+                }
+                
+                if (finalCarName === "Неопознанный Объект 🧐") {
+                     alert("Не удалось распознать автомобиль. Попробуй обновить страницу и сфокусироваться.");
+                }
+
+            } catch (error) {
+                // Обработка ошибки
+                console.error("Ошибка распознавания MobileNet:", error);
+                finalCarName = "СБОЙ: Повтори сканирование";
+                alert("СБОЙ: Не удалось обработать кадр. Повтори сканирование.");
+            } finally {
+                // 5. Сохранение и сброс интерфейса (гарантированно)
+                if (imageDataURL && !finalCarName.includes("СБОЙ")) {
+                     saveCar(finalCarName, imageDataURL, confidence);
+                }
+               
+                alert(`✅ Результат: ${finalCarName}\nУверенность: ${confidence}%`);
+                
+                loader.style.display = 'none';
+                scanBtn.disabled = false;
+                showCollection();
+            }
+        }
+        
+        // --- 3. ПЕРЕКЛЮЧЕНИЕ ЭКРАНОВ ---
+
+        function showCollection() {
+            // Камера выключается только при переходе в Гараж
+            stopCamera(); 
+            renderGallery();
+            document.getElementById('camera-screen').style.display = 'none';
+            document.getElementById('collection-screen').style.display = 'block';
+        }
+
+        function showCamera() {
+            document.getElementById('collection-screen').style.display = 'none';
+            document.getElementById('camera-screen').style.display = 'flex';
+            // Камера включается только при возврате из Гаража
+            startCamera(); 
+        }
+
+        // --- 4. СОХРАНЕНИЕ ---
+        function saveCar(model, image, confidence) {
+            let garage = JSON.parse(localStorage.getItem('tfjsCarsDB_vFinalV2')) || [];
+            garage.push({ id: Date.now(), model: model, image: image, confidence: confidence, date: new Date().toLocaleDateString() });
+            localStorage.setItem('tfjsCarsDB_vFinalV2', JSON.stringify(garage));
+        }
+
+        function renderGallery() {
+            const list = document.getElementById('list');
+            const garage = JSON.parse(localStorage.getItem('tfjsCarsDB_vFinalV2')) || []; 
+            document.getElementById('count').innerText = garage.length;
+            list.innerHTML = '';
+            
+            garage.reverse().forEach(car => {
+                list.innerHTML += `
+                    <div class="card">
+                        <img src="${car.image}" alt="car">
+                        <div class="card-info">
+                            <div style="font-weight:bold;">${car.model}</div>
+                            <div style="font-size:0.8em; color:gray;">
+                                Уверенность: ${car.confidence}%<br>
+                                Поймана: ${car.date}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        init();
+        renderGallery();
+    </script>
+</body>
+</html>
